@@ -14,6 +14,28 @@ import type { APIRoute } from 'astro';
 const LINE_MAP_CACHE_TTL = 300; // seconds
 const lineMapInFlight = new Map<string, Promise<{ body: string; status: number }>>();
 
+const UPSTREAM_BASE = 'https://itranvias.com/queryitr_v3.php';
+
+// The client sends `dato` percent-encoded because some calls carry several
+// "&clave=valor" pairs inside it (func=99: "100&mostrar=B"). Rebuild the
+// upstream URL by splitting those pairs back out, exactly like the client does
+// when it talks to itranvias.com directly from the native app.
+// El cliente envía `dato` codificado porque algunas llamadas llevan varios pares
+// "&clave=valor" dentro (func=99: "100&mostrar=B"). Reconstruimos la URL del
+// upstream separando esos pares, igual que hace el cliente al llamar directo
+// desde la app nativa.
+function buildUpstreamUrl(func: string, dato: string): string {
+  const params = new URLSearchParams();
+  params.set('func', func);
+  String(dato ?? '').split('&').forEach((part) => {
+    if (!part) return;
+    const eq = part.indexOf('=');
+    if (eq === -1) params.set('dato', part);
+    else params.set(part.slice(0, eq), part.slice(eq + 1));
+  });
+  return `${UPSTREAM_BASE}?${params.toString()}`;
+}
+
 async function getUpstreamWithSharedCache(targetUrl: string, cacheable: boolean, buildResponse: (body: string, status: number) => Response): Promise<Response> {
   if (!cacheable) {
     const res = await fetchUpstream(targetUrl);
@@ -102,7 +124,7 @@ export const GET: APIRoute = async ({ request }) => {
     if (!func || !dato) {
       return new Response(JSON.stringify({ error: 'Missing parameters' }), { status: 400 });
     }
-    targetUrl = `https://itranvias.com/queryitr_v3.php?func=${func}&dato=${dato}`;
+    targetUrl = buildUpstreamUrl(func, dato);
   } else if (type === 'photon') {
     const q = url.searchParams.get('q');
     const lat = url.searchParams.get('lat') || '43.3623';

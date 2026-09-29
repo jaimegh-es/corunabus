@@ -124,6 +124,30 @@ async function fetchWithRetry(url: string, fallbackUrl?: string): Promise<any> {
   }
 }
 
+// The upstream reads `dato` as a set of "&clave=valor" pairs (func=99 uses
+// "100&mostrar=B"). getQuery() percent-encodes the whole value so the proxy
+// receives it as one parameter, but sending that encoded value straight to
+// itranvias.com makes it parse "100%26mostrar%3DB" as the line id and answer
+// `resultado: ERROR` (empty bus map) - which is what the native app used to get,
+// since it talks to the upstream directly. Split the pairs back out so both
+// transports send the same, valid request.
+// El upstream lee `dato` como pares "&clave=valor" (func=99 usa "100&mostrar=B").
+// getQuery() codifica el valor entero para que el proxy lo reciba como un solo
+// parámetro, pero enviarlo codificado a itranvias.com hace que interprete
+// "100%26mostrar%3DB" como id de línea y devuelva `resultado: ERROR` (mapa de
+// buses vacío). Separamos los pares para que ambas rutas envíen la misma petición.
+export function buildUpstreamQueryUrl(func: number, dato: string): string {
+  const params = new URLSearchParams();
+  params.set('func', String(func));
+  String(dato ?? '').split('&').forEach((part) => {
+    if (!part) return;
+    const eq = part.indexOf('=');
+    if (eq === -1) params.set('dato', part);
+    else params.set(part.slice(0, eq), part.slice(eq + 1));
+  });
+  return `https://itranvias.com/queryitr_v3.php?${params.toString()}`;
+}
+
 export async function getQuery(func: number, dato: string) {
   if (isApiCooldownActive()) {
     throw new Error('API cooldown active');
@@ -131,7 +155,7 @@ export async function getQuery(func: number, dato: string) {
 
   // Construct URLs
   const proxyUrl = `${BASE_URL}?func=${func}&dato=${encodeURIComponent(dato)}`;
-  const directUrl = `https://itranvias.com/queryitr_v3.php?func=${func}&dato=${encodeURIComponent(dato)}`;
+  const directUrl = buildUpstreamQueryUrl(func, dato);
   const prodProxyUrl = `${PROD_API_HOST}/api/proxy?func=${func}&dato=${encodeURIComponent(dato)}`;
 
   let primaryUrl = proxyUrl;

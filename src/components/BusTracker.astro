@@ -219,17 +219,35 @@ const t = getTranslations(lang);
     letter-spacing: 0.03em;
   }
 
+  bus-tracker .tracker-dest-note {
+    margin: 0 0 0.5rem;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
   bus-tracker .tracker-dest-list {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    max-height: 300px;
+    gap: 0.5rem;
+    max-height: min(430px, 60vh);
     overflow-y: auto;
+    /* Room for the finger to scroll the list without it grabbing a row. */
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding: 2px;
+    margin: -2px;
   }
 
   bus-tracker .tracker-dest-item-wrap {
     display: flex;
     flex-direction: column;
+    /* The list is a scrolling column, so every row is a flex item that can be
+       squeezed. `overflow: hidden` below drops the automatic min-height, so a
+       long list (a line with 40+ stops) shrank every row to a 2px line and the
+       buttons inside it were clipped away. Rows keep their height and the list
+       scrolls instead. */
+    flex-shrink: 0;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     background: #fff;
@@ -238,19 +256,56 @@ const t = getTranslations(lang);
   }
 
   bus-tracker .tracker-dest-item-wrap:has(.tracker-dest-item.open) {
-    border-color: var(--primary);
+    border-color: #94a3b8;
   }
 
+  /* Stops the bus is not going to serve on this trip: the rest of the line, in
+     either direction, plus the ones it has already passed. They stay in the list
+     so the line can be read whole, but they are not destinations, so they are
+     only quieter, never colour-coded. */
+  bus-tracker .tracker-dest-item-wrap.is-rest {
+    background: #fff;
+    border-color: #eef2f7;
+  }
+
+  bus-tracker .tracker-dest-item-wrap.is-rest .tracker-dest-item {
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  bus-tracker .tracker-dest-item-wrap.is-rest .tracker-dest-item:hover {
+    background: #f8fafc;
+  }
+
+  /* The only marker of "this one the bus is going to serve": a dot. */
+  bus-tracker .tracker-dest-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #d7dee7;
+  }
+
+  bus-tracker .tracker-dest-item-wrap.is-ahead .tracker-dest-dot {
+    background: #16a34a;
+  }
+
+  /* Sized for a thumb: 52px tall rows, comfortable padding and a full-width
+     target, so a stop can be picked without aiming. */
   bus-tracker .tracker-dest-item {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    width: 100%;
+    min-height: 52px;
     text-align: left;
-    padding: 0.6rem 0.8rem;
+    padding: 0.8rem 0.9rem;
     border: none;
     background: none;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+    line-height: 1.3;
+    color: var(--text);
     transition: background 0.15s;
   }
 
@@ -258,16 +313,31 @@ const t = getTranslations(lang);
     background: #f8fafc;
   }
 
+  /* No hover on a touchscreen, so the press itself is the feedback. */
+  bus-tracker .tracker-dest-item:active {
+    background: #eef2f7;
+  }
+
+  /* The stop name takes the room that is left and wraps; the countdown beside
+     it is nowrap and on a narrow screen would squeeze the name down to an
+     unreadable sliver. */
+  bus-tracker .tracker-dest-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   bus-tracker .tracker-dest-item small {
+    flex: 0 0 auto;
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     white-space: nowrap;
   }
 
   bus-tracker .tracker-dest-caret {
-    margin-left: auto;
+    flex: 0 0 auto;
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     transition: transform 0.2s;
   }
 
@@ -278,20 +348,29 @@ const t = getTranslations(lang);
 
   bus-tracker .tracker-dest-actions {
     display: flex;
+    flex-shrink: 0;
     gap: 0.5rem;
-    padding: 0.6rem 0.8rem;
+    padding: 0.75rem 0.9rem;
     border-top: 1px dashed #e2e8f0;
     background: #fafbfc;
   }
 
+  /* The display:flex above beats the [hidden] attribute's UA display:none, so
+     every action row was visible at once. Only the stop the user opened should
+     show its actions. */
+  bus-tracker .tracker-dest-actions[hidden] {
+    display: none;
+  }
+
   bus-tracker .tracker-dest-track {
     flex: 1;
-    padding: 0.5rem 0.75rem;
+    min-height: 48px;
+    padding: 0.7rem 0.9rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--primary);
     color: white;
-    font-size: 0.82rem;
+    font-size: 0.92rem;
     font-weight: 700;
     cursor: pointer;
   }
@@ -303,14 +382,55 @@ const t = getTranslations(lang);
   bus-tracker .tracker-dest-view {
     display: inline-flex;
     align-items: center;
-    padding: 0.5rem 0.75rem;
+    min-height: 48px;
+    padding: 0.7rem 0.9rem;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #fff;
     color: var(--text);
-    font-size: 0.82rem;
+    font-size: 0.92rem;
     font-weight: 600;
     text-decoration: none;
+  }
+
+  /* Narrow screens: side by side the countdown squeezes the stop name to a
+     couple of characters, so it drops to its own line under the name, and the
+     two actions stack instead of fighting for the width. */
+  @media (max-width: 420px) {
+    bus-tracker .tracker-dest-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      column-gap: 0.5rem;
+      row-gap: 0.15rem;
+    }
+
+    bus-tracker .tracker-dest-dot {
+      grid-area: 1 / 1;
+    }
+
+    bus-tracker .tracker-dest-name {
+      grid-area: 1 / 2;
+    }
+
+    bus-tracker .tracker-dest-item small {
+      grid-area: 2 / 1 / 3 / 4;
+    }
+
+    bus-tracker .tracker-dest-caret {
+      grid-area: 1 / 3;
+      justify-self: end;
+    }
+
+    bus-tracker .tracker-dest-actions {
+      flex-wrap: wrap;
+    }
+
+    bus-tracker .tracker-dest-track,
+    bus-tracker .tracker-dest-view {
+      flex: 1 1 100%;
+      justify-content: center;
+    }
   }
 
   bus-tracker .tracker-started {
@@ -372,6 +492,9 @@ const t = getTranslations(lang);
     // in the map cache and cost 0 requests.
     private LINE_RECENCY_KEY = 'buscoruna_line_recency';
     private LINE_RECENCY_MAX = 100;
+    // How close a bus has to be to a stop of a route to be considered "on" it.
+    // Beyond this the position is not usable to work out the stops ahead.
+    private NEAR_STOP_METERS = 1000;
     private scanAbort = false;
 
     connectedCallback() {
@@ -744,8 +867,53 @@ const t = getTranslations(lang);
       }
 
       const lineComer = found.line.lin_comer || found.line.id;
-      const destName = found.bus.destino || '';
+      // The upstream map feed (func=99) sends no `destino`, so the header used to
+      // render "hacia " with nothing after it. The direction of travel is known
+      // anyway: it is the route the bus is running, whose last stop is the
+      // terminus of that direction.
+      const destName = found.bus.destino || routeInfo.destName || '';
       this.currentBus = found;
+
+      // The line read whole: every stop it serves, in both directions, so the
+      // list can be scanned for the stop the user is after. The stops still
+      // ahead of the bus in the direction it is travelling are the ones marked
+      // with the remaining time, and the only ones that can be tracked to.
+      const ahead = routeInfo.stopsAhead;
+      const aheadAt = new Map(ahead.map((pid: any, i: number) => [String(pid), i + 1]));
+      const items = routeInfo.lineStops.map((pid: any) => {
+        const stop = this.catalog.paradas?.[pid];
+        if (!stop) return '';
+        const remaining = aheadAt.get(String(pid));
+        const isAhead = remaining !== undefined;
+        const name = this.escapeHtml(stop.nombre || String(pid));
+        // Only the stops ahead carry a countdown. The rest are listed plainly:
+        // the note above the list already says which ones the bus will serve.
+        const eta = isAhead
+          ? `<small>${t.trackerDestRemaining
+              .replace('{m}', remaining.toString())
+              .replace('{min}', Math.round(remaining * 2).toString())}</small>`
+          : '';
+        return `
+          <div class="tracker-dest-item-wrap ${isAhead ? 'is-ahead' : 'is-rest'}">
+            <button type="button" class="tracker-dest-item" data-stop-id="${pid}">
+              <span class="tracker-dest-dot" aria-hidden="true"></span>
+              <span class="tracker-dest-name">${name}</span>
+              ${eta}
+              <span class="tracker-dest-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="tracker-dest-actions" data-stop-id="${pid}" hidden>
+              ${isAhead ? `<button type="button" class="tracker-dest-track" data-stop-id="${pid}">${t.trackerDestTrack}</button>` : ''}
+              <a href="/stop/${pid}" class="tracker-dest-view">${lang === 'en' ? 'View stop' : 'Ver parada'}</a>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const note = !routeInfo.positionKnown
+        ? t.trackerPositionUnknown
+        : routeInfo.stopsAhead.length === 0
+          ? t.trackerNoStopsAhead
+          : t.trackerFullLine;
 
       this.showStatus('');
       this.showResult(`
@@ -757,29 +925,14 @@ const t = getTranslations(lang);
               .replace('{line}', lineComer)
               .replace('{dest}', destName)}</span>
           </div>
-          <small>${routeInfo.nearestStop ? `${t.trackerNearStop} <strong>${routeInfo.nearestStop.nombre}</strong>` : ''}</small>
+          <small>${routeInfo.nearestStop ? `${t.trackerNearStop} <strong>${this.escapeHtml(routeInfo.nearestStop.nombre || '')}</strong>` : ''}</small>
         </div>
-        <div class="tracker-dest-title">${t.trackerSelectDest}</div>
-        <div class="tracker-dest-list">
-          ${routeInfo.route.paradas.slice(routeInfo.nearestIdx + 1).map((pid: any, i: number) => {
-            const stop = this.catalog.paradas?.[pid];
-            if (!stop) return '';
-            const remaining = i + 1;
-            return `
-              <div class="tracker-dest-item-wrap">
-                <button type="button" class="tracker-dest-item" data-stop-id="${pid}" data-stop-name="${stop.nombre.replace(/"/g, '&quot;')}">
-                  <span>${stop.nombre}</span>
-                  <small>${t.trackerDestRemaining.replace('{m}', remaining.toString()).replace('{min}', Math.round(remaining * 2).toString())}</small>
-                  <span class="tracker-dest-caret" aria-hidden="true">▾</span>
-                </button>
-                <div class="tracker-dest-actions" data-stop-id="${pid}" hidden>
-                  <button type="button" class="tracker-dest-track" data-stop-id="${pid}">${t.trackerDestTrack}</button>
-                  <a href="/stop/${pid}" class="tracker-dest-view">${lang === 'en' ? 'View stop' : 'Ver parada'}</a>
-                </div>
-              </div>
-            `;
-          }).join('') || '<div class="tracker-error">—</div>'}
-        </div>
+        ${items
+          ? `<div class="tracker-dest-title">${t.trackerSelectDest}</div>
+             <p class="tracker-dest-note">${note}</p>
+             <div class="tracker-dest-list">${items}</div>`
+          : `<div class="tracker-error">${t.trackerNoStopsAhead}</div>
+             <button type="button" class="tracker-reset" id="tracker-reset-btn">${t.trackerCancel}</button>`}
       `);
 
       this.querySelectorAll('.tracker-dest-item').forEach(btn => {
@@ -788,50 +941,158 @@ const t = getTranslations(lang);
         });
       });
 
+      // The line is listed whole, so the first stop still ahead of the bus can
+      // sit well below the fold, after every stop it has already passed. Start
+      // the scroll there: that is where the choices the bus can serve begin.
+      const list = this.querySelector('.tracker-dest-list');
+      const firstAhead = list?.querySelector('.tracker-dest-item-wrap.is-ahead');
+      if (list && firstAhead && firstAhead.offsetTop !== undefined) {
+        list.scrollTop = Math.max(0, firstAhead.offsetTop - list.offsetTop - 4);
+      }
+
       this.querySelectorAll('.tracker-dest-track').forEach(btn => {
         btn.addEventListener('click', () => {
           this.startTracking(routeInfo, btn.getAttribute('data-stop-id')!);
         });
       });
+
+      this.querySelector('#tracker-reset-btn')?.addEventListener('click', () => {
+        this.currentBus = null;
+        this.showResult('');
+        this.showStatus('');
+      });
     }
 
+    // Stop names and line colours come from an external feed, so they are escaped
+    // before being interpolated into innerHTML.
+    // Los nombres de parada vienen de un feed externo: se escapan antes de
+    // inyectarlos en el HTML.
+    escapeHtml(value: string) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Resolve which route the bus is running and which stops are still ahead.
+    //
+    // The live feed (func=99) reports each bus under `sentido`, the direction it
+    // is travelling in, which matches the index of that direction in `line.rutas`.
+    // That direction - not "whichever route has the most stops left" - is what
+    // decides the destination list: picking by position alone returned the
+    // opposite direction for about half of the live buses, because a route and
+    // its return share the same streets and stops, so a bus sitting on a shared
+    // stretch was just as close to the reverse route.
+    // Resolver en qué ruta va el bus y qué paradas le quedan por delante.
     resolveRoute(bus: any, line: any) {
-      const paradasById = this.catalog?.paradas || {};
+      const routes: any[] = Array.isArray(line?.rutas) ? line.rutas.filter(r => r && Array.isArray(r.paradas) && r.paradas.length >= 2) : [];
+      if (routes.length === 0) return null;
+
+      // Only the routes that run in the direction the bus is travelling, keeping
+      // their catalog order so `sentido` indexes into it.
+      const sentido = parseInt(bus?.sentido, 10);
+      const direction = !isNaN(sentido) && sentido >= 0 && sentido < routes.length
+        ? routes.filter(r => this.sameDirection(r, routes[sentido]))
+        : routes;
+
+      // A line can run variants of the same direction through different streets.
+      // The bus is on the one it is physically closest to; the number of stops
+      // left only breaks ties between routes that share that stretch.
       let best: any = null;
-      const destNorm = String(bus.destino || '').toLowerCase().trim();
+      for (let di = 0; di < direction.length; di++) {
+        const route = direction[di];
+        const nearest = this.nearestStopIndex(bus, route);
+        // A bus whose GPS fix is missing, or one too far from any stop of this
+        // route, tells us nothing about where it is on the route. Without a
+        // position we cannot tell which stops it has already passed, so the
+        // whole route is listed: showing every stop beats showing none.
+        if (!nearest || nearest.idx === -1 || nearest.dist > this.NEAR_STOP_METERS) continue;
 
-      for (let di = 0; di < (line.rutas || []).length; di++) {
-        const route = line.rutas[di];
-        if (!route || !route.paradas || route.paradas.length < 2) continue;
-
-        let nearestIdx = -1;
-        let minDist = Infinity;
-        route.paradas.forEach((pid: any, i: number) => {
-          const s = paradasById[pid];
-          if (s) {
-            const d = this.getDistance(bus.posy, bus.posx, s.posy, s.posx);
-            if (d < minDist) { minDist = d; nearestIdx = i; }
-          }
-        });
-        if (nearestIdx === -1 || minDist > 1000) continue;
-
-        const lastStop = paradasById[route.paradas[route.paradas.length - 1]];
-        const destMatches = destNorm === '' || !lastStop || lastStop.nombre.toLowerCase().includes(destNorm);
-        const remaining = route.paradas.length - 1 - nearestIdx;
-
-        if (!best || (destMatches && !best.destMatches) || (destMatches === best.destMatches && remaining > best.remaining)) {
-          best = { route, di, nearestIdx, minDist, destMatches, remaining };
+        const remaining = route.paradas.length - 1 - nearest.idx;
+        if (!best || nearest.dist < best.minDist || (nearest.dist === best.minDist && remaining > best.remaining)) {
+          best = { route, di, nearestIdx: nearest.idx, minDist: nearest.dist, remaining };
         }
       }
-      // Prefer a matching route even with fewer remaining stops if none matched
-      if (best) return this.finalizeRoute(best);
-      return null;
+
+      if (!best) {
+        const route = direction[0];
+        return this.finalizeRoute({ route, di: 0, nearestIdx: -1, minDist: Infinity, remaining: route.paradas.length }, routes);
+      }
+      return this.finalizeRoute(best, routes);
     }
 
-    finalizeRoute(info: any) {
+    // Two routes run in the same direction when they start and end at the same
+    // stops (a line with variants has one route per variant, all sharing the
+    // direction of the first one).
+    sameDirection(a: any, b: any) {
+      return a.paradas[0] === b.paradas[0] &&
+             a.paradas[a.paradas.length - 1] === b.paradas[b.paradas.length - 1];
+    }
+
+    // Index of the stop on this route that the bus is closest to. Stops without
+    // coordinates or a bus without a usable position are ignored.
+    nearestStopIndex(bus: any, route: any) {
+      const lat = Number(bus?.posy);
+      const lon = Number(bus?.posx);
+      // Number(null) and Number("") are 0, which is a real (if unlikely) point in
+      // the ocean, so the raw values have to be checked too.
+      if (bus?.posy === null || bus?.posy === undefined || bus.posy === '' ||
+          bus?.posx === null || bus?.posx === undefined || bus.posx === '' ||
+          !Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return null;
+      }
       const paradasById = this.catalog?.paradas || {};
-      const nearestStop = paradasById[info.route.paradas[info.nearestIdx]];
-      return { ...info, nearestStop };
+      let idx = -1;
+      let dist = Infinity;
+      route.paradas.forEach((pid: any, i: number) => {
+        const s = paradasById[pid];
+        if (!s) return;
+        const d = this.getDistance(Number(bus.posy), Number(bus.posx), Number(s.posy), Number(s.posx));
+        if (d < dist) { dist = d; idx = i; }
+      });
+      return { idx, dist };
+    }
+
+    finalizeRoute(info: any, allRoutes: any[]) {
+      const paradasById = this.catalog?.paradas || {};
+      const paradas = info.route.paradas;
+      const nearestStop = info.nearestIdx >= 0 ? paradasById[paradas[info.nearestIdx]] : null;
+      const lastStop = paradasById[paradas[paradas.length - 1]];
+      // Everything after the stop the bus is closest to. Only meaningful when the
+      // bus position is known (nearestIdx >= 0): otherwise nothing is known to
+      // be ahead of it, so no stop is offered as a destination.
+      const stopsAhead = info.nearestIdx >= 0 ? paradas.slice(info.nearestIdx + 1) : [];
+      return {
+        ...info,
+        nearestStop,
+        stopsAhead,
+        positionKnown: info.nearestIdx >= 0,
+        // The line read whole: every stop it serves, both directions and every
+        // variant, in catalog order and without repeats. The bus' own direction
+        // is what tells which of them are still ahead.
+        lineStops: this.lineStopList(allRoutes),
+        destName: lastStop?.nombre || '',
+      };
+    }
+
+    // Every stop a line serves, in catalog order, de-duplicated. Walks all the
+    // routes, not just the one the bus is running, so the list covers the whole
+    // line instead of a single direction.
+    lineStopList(routes: any[]) {
+      const seen = new Set<string>();
+      const list: any[] = [];
+      for (const route of routes) {
+        if (!Array.isArray(route?.paradas)) continue;
+        for (const pid of route.paradas) {
+          const key = String(pid);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          list.push(pid);
+        }
+      }
+      return list;
     }
 
     toggleDestActions(btn: HTMLElement) {
@@ -851,10 +1112,14 @@ const t = getTranslations(lang);
 
     startTracking(routeInfo: any, stopId: string) {
       const destId = parseInt(stopId);
-      const originId = parseInt(routeInfo.route.paradas[routeInfo.nearestIdx]);
+      // The bus has no known position on the route (nearestIdx -1) when its GPS
+      // fix is missing, so there is no meaningful origin stop to start from.
+      const originId = routeInfo.nearestIdx >= 0
+        ? parseInt(routeInfo.route.paradas[routeInfo.nearestIdx])
+        : NaN;
       const bus = this.currentBus?.bus;
 
-      if (!bus || isNaN(destId)) return;
+      if (!bus || isNaN(destId) || isNaN(originId)) return;
 
       tracking.set({
         busId: bus.bus.toString(),

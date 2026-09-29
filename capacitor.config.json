@@ -25,7 +25,7 @@
       "172.16.180.185"
     ],
     "cleartext": true,
-    "url": "https://xn--coruabus-g3a.inled.es"
+    "url": "http://localhost:4321"
   },
   "android": {
     "allowMixedContent": true
