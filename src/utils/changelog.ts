@@ -14,6 +14,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: '0.0.11',
+        title: '👆 Los favoritos ya no se pulsan solos',
+        items: [
+            'En la lista de favoritos, un item se abría solo sin haberlo tocado. Pasaba al terminar un scroll o al repintarse la lista mientras tenías el dedo encima: el toque apuntaba a un item y el navegador abría otro.',
+            'Ahora un toque solo cuenta si el dedo apenas se movió y quedó sobre el mismo item. El teclado y los lectores de pantalla siguen funcionando igual.',
+            'La lista de favoritos ya no se vuelve a pintar si no ha cambiado nada, que era lo que provocaba el salto de items.',
+        ],
+    },
+    {
         version: '0.0.10',
         title: '🚌 El seguimiento ya no se corta antes de tiempo',
         items: [

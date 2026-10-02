@@ -26,11 +26,27 @@ const t = getTranslations(lang);
     import { storage } from '../utils/storage';
     import { API } from '../services/api';
     import { tracking } from '../utils/tracking';
+    import { guardPhantomClicks } from '../utils/phantomClicks';
     import { createIcons, Star, Heart, ChevronRight, Map, Pencil } from 'lucide';
     import { getTranslations } from '../utils/i18n';
 
     const lang = document.documentElement.getAttribute('data-lang') || 'es';
     const t = getTranslations(lang);
+
+    // Rebuilding the list while a finger is on it is what makes an item open on
+    // its own: the tap was aimed at the old DOM and the click lands on whatever
+    // replaced it. Skipping a repaint that changes nothing removes the commonest
+    // trigger, and guardPhantomClicks catches the rest.
+    // Repintar la lista con el dedo encima es lo que hace que un item se abra
+    // solo: el toque apuntaba al DOM viejo y el click cae en el nuevo.
+    let lastRenderedHtml: string | null = null;
+
+    function paint(container: HTMLElement, html: string): boolean {
+      if (html === lastRenderedHtml) return false;
+      lastRenderedHtml = html;
+      container.innerHTML = html;
+      return true;
+    }
 
     // Load and render all favorites categories (stops, routes, planner trajectories)
     // Cargar y renderizar todas las categorías de favoritos (paradas, rutas, trayectos del planificador)
@@ -46,19 +62,19 @@ const t = getTranslations(lang);
       // Check if there are no favorites at all
       // Comprobar si no hay ningún favorito guardado
       if (favIds.length === 0 && favRoutes.length === 0 && favPlannerRoutes.length === 0) {
-        container.innerHTML = `
+        paint(container, `
           <div class="empty-state">
             <span class="icon"><i data-lucide="star"></i></span>
             <p>${t.favsNoFavsYet}</p>
             <p><small>${t.favsHint}</small></p>
           </div>
-        `;
+        `);
         createIcons({ icons: { Star, Pencil } });
         return;
       }
 
       if (!catalog) {
-        container.innerHTML = `<p>${t.favsDataError}</p>`;
+        paint(container, `<p>${t.favsDataError}</p>`);
         return;
       }
 
@@ -208,7 +224,7 @@ const t = getTranslations(lang);
         `;
       }
 
-      container.innerHTML = html;
+      if (!paint(container, html)) return;
       createIcons({ icons: { Star, Heart, ChevronRight, Map, Pencil } });
 
       // Add listeners to favorite route links to set target destination
@@ -295,6 +311,13 @@ const t = getTranslations(lang);
         });
       });
     }
+
+    // Installed on the container, not on the cards, so it survives every repaint
+    // and does not have to be re-attached.
+    // Se instala en el contenedor, no en las tarjetas, para sobrevivir a los
+    // repintados sin volver a conectarlo.
+    const favoritesContainer = document.getElementById('favorites-container');
+    if (favoritesContainer) guardPhantomClicks(favoritesContainer);
 
     loadFavorites();
 
