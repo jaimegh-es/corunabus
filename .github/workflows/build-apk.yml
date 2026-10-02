@@ -62,10 +62,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "chore(release): v${{ steps.release.outputs.version }} [skip ci]"
-          git push origin HEAD:main
-          git fetch origin
-          git reset --hard origin/main
+          # Re-releasing the version that is already in package.json changes
+          # nothing, and "nothing to commit" fails the whole release before the
+          # APK is even built. Only commit when there is something to commit.
+          # Relanzar la version que ya esta en package.json no cambia nada, y
+          # "nothing to commit" tumbaba el release entero sin llegar a compilar.
+          if git diff --cached --quiet; then
+            echo "La versión ya era ${{ steps.release.outputs.version }}, no hay nada que confirmar."
+          else
+            git commit -m "chore(release): v${{ steps.release.outputs.version }} [skip ci]"
+            git push origin HEAD:main
+            git fetch origin
+            git reset --hard origin/main
+          fi
           node -p "require('./package.json').version"
 
       - uses: actions/setup-node@v4
