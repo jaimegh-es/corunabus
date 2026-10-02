@@ -88,6 +88,36 @@ public class BackgroundTrackerService extends Service implements LocationListene
     // Guards the self-stop scheduled after arrival so it only fires once.
     private volatile boolean stopScheduled = false;
 
+    // --- Journey guards ------------------------------------------------------
+    // The func=0 feed lists buses by proximity, with no direction field and a
+    // very generous range (it happily reports a bus 12 km away), so "the bus is
+    // not in the feed" is not proof of arrival: a timeout, a 429, or a bus that
+    // has not come near yet all look exactly the same. The old code finished
+    // the journey on the very first such poll, which killed tracking about one
+    // minute after the "press the stop button" alert, while the bus was still
+    // minutes away. Finishing now requires positive proof.
+    private static final int ARRIVAL_CONFIRM_POLLS = 2;    // two samples, 10s apart
+    private static final int MISSING_POLLS_TO_FINISH = 6;  // a full minute of answered polls
+    private static final int FAILED_POLLS_TO_FINISH = 18;  // 3 minutes with no data at all
+    private static final long MAX_JOURNEY_MS = 90 * 60 * 1000L;
+    private static final int ARRIVED_DISTANCE_M = 50;       // the bus is at the stop
+    private static final int USER_ARRIVED_DISTANCE_M = 150; // the user is on it
+
+    private int originArrivedPolls = 0;
+    private int destArrivedPolls = 0;
+    private int originMissingPolls = 0;
+    private int destMissingPolls = 0;
+    private int failedPolls = 0;
+    private long journeyStartedAt = 0;
+    // Whether this poll managed to read a usable feed at all, used for the
+    // "no data for minutes" guard. Read data, not just a 200: a response saying
+    // anything but OK counts as a failure too.
+    private boolean pollGotData = false;
+    // Sticky: the feed did report the bus standing at the stop at some point,
+    // so from then on its absence from the feed means something.
+    private boolean originSeenAtStop = false;
+    private boolean destSeenAtStop = false;
+
     private ScheduledExecutorService executor;
     private PowerManager.WakeLock wakeLock;
     private LocationManager locationManager;
@@ -151,6 +181,12 @@ public class BackgroundTrackerService extends Service implements LocationListene
                 lastEta = -1;
                 lastDestEta = -1;
                 stopScheduled = false;
+                originArrivedPolls = 0;
+                destArrivedPolls = 0;
+                originMissingPolls = 0;
+                destMissingPolls = 0;
+                failedPolls = 0;
+                journeyStartedAt = System.currentTimeMillis();
 
                 startForegroundServiceNotification();
                 startPollingLoop();
@@ -431,6 +467,110 @@ public class BackgroundTrackerService extends Service implements LocationListene
     }
 
     /**
+     * Distance in metres reported by the func=0 feed, or -1 when absent or
+     * unparseable. The feed reports it as a plain string in metres, so a
+     * distance is a far better "is it really there?" signal than the ETA
+     * alone: it does not jitter between 0 and 1 while the bus is still
+     * hundreds of metres away.
+     * Distancia en metros que da el feed func=0, o -1 si no está. Es una señal
+     * mucho mejor que el ETA para saber si el bus está de verdad en la parada:
+     * el ETA salta entre 0 y 1 con el bus aún a cientos de metros.
+     */
+    private int parseDistanceMeters(JSONObject busObj) {
+        if (busObj == null) return -1;
+        Object raw = busObj.opt("distancia");
+        if (raw == null) return -1;
+        try {
+            return (int) Math.round(Double.parseDouble(raw.toString().trim()));
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /**
+     * True when the feed positively reports the bus standing at the stop:
+     * within ARRIVED_DISTANCE_M, or an ETA of 0 as a fallback for feeds that
+     * omit the distance.
+     * Verdadero cuando el feed informa que el bus está en la parada: dentro de
+     * 50 m, o con ETA 0 si el feed no manda distancia.
+     */
+    private boolean busIsAtStop(JSONObject busObj, int waitTime) {
+        int meters = parseDistanceMeters(busObj);
+        if (meters >= 0) return meters <= ARRIVED_DISTANCE_M;
+        return waitTime == 0;
+    }
+
+    /**
+     * Hard limits that no feed can talk the service out of: a journey that has
+     * been open for 90 minutes, and one that has been unable to read anything
+     * at all for 3 minutes (no data means no alert can ever fire, so polling
+     * only drains the battery). Returns true when the journey is over and the
+     * caller should stop working.
+     * Topes que ningún feed puede esquivar: 90 minutos de viaje abierto, o 3
+     * minutos sin poder leer nada (sin datos no puede sonar ningún aviso, así
+     * que seguir sondeando solo gasta batería). true = el viaje ha acabado.
+     */
+    private boolean checkJourneyGuards() {
+        if (journeyStartedAt > 0 && System.currentTimeMillis() - journeyStartedAt > MAX_JOURNEY_MS) {
+            Log.i(TAG, "Journey time limit reached, stopping");
+            scheduleStopAfter(10);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Renew the wake lock for as long as the journey lasts. It is acquired once
+     * in onCreate with a 30 minute timeout, so without this a journey that
+     * legitimately runs longer than half an hour would be silently starved of
+     * CPU and "stop tracking" on its own.
+     * Renueva el wake lock mientras dure el viaje. Se adquiere una vez en
+     * onCreate con 30 minutos de límite, así que sin esto un viaje largo se
+     * queda sin CPU y para él solo.
+     */
+    private void renewWakeLock() {
+        if (wakeLock == null || wakeLock.isHeld()) return;
+        try {
+            wakeLock.acquire(MAX_JOURNEY_MS);
+        } catch (Exception e) {
+            Log.w(TAG, "Could not renew wake lock", e);
+        }
+    }
+
+    /**
+     * Confirmation that the user actually got there, a minute after the
+     * destination alert fired. That alert can legitimately fire from the
+     * previous stop, which is still a walk away, so it must never end the
+     * journey by itself -- but if the user is still standing on the destination
+     * a minute later, the trip is over.
+     * Confirma que el usuario ha llegado, un minuto después del aviso de
+     * destino. Ese aviso puede saltar legítimamente desde la parada anterior,
+     * todavía a un paseo, así que no puede acabar el viaje él solo; pero si un
+     * minuto después el usuario sigue en la parada, el viaje ha acabado.
+     */
+    private void scheduleUserArrivalCheck(long seconds) {
+        if (executor == null || executor.isShutdown()) return;
+        executor.schedule(() -> {
+            if (!isRunning || !gpsTriggered || locationManager == null) return;
+            try {
+                Location last = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                if (last == null) last = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                if (last == null) return; // no fix: better keep tracking than stop wrongly
+                float[] res = new float[1];
+                Location.distanceBetween(last.getLatitude(), last.getLongitude(), destLat, destLon, res);
+                if (res[0] <= USER_ARRIVED_DISTANCE_M) {
+                    Log.i(TAG, "User is at the destination, stopping");
+                    scheduleStopAfter(20);
+                }
+            } catch (SecurityException e) {
+                // Location permission was revoked: no way to confirm arrival.
+                // Permiso retirado: no hay forma de confirmar la llegada.
+                Log.w(TAG, "No permission to read the last known location", e);
+            }
+        }, seconds, TimeUnit.SECONDS);
+    }
+
+    /**
      * Stop the service a bit after arrival so the last notification/foreground
      * state is visible, without keeping the battery drain running forever.
      * Guarded so only one schedule wins.
@@ -444,7 +584,10 @@ public class BackgroundTrackerService extends Service implements LocationListene
     }
 
     private void pollEta() {
+        if (checkJourneyGuards()) return;
+        renewWakeLock();
         if (originStopId <= 0) return;
+        pollGotData = false;
 
         String json = fetchUrl("https://itranvias.com/queryitr_v3.php?func=0&dato=" + originStopId);
         if (json == null) {
@@ -455,6 +598,7 @@ public class BackgroundTrackerService extends Service implements LocationListene
             try {
                 JSONObject obj = new JSONObject(json);
                 if ("OK".equalsIgnoreCase(obj.optString("resultado"))) {
+                    pollGotData = true;
                     JSONObject buses = obj.optJSONObject("buses");
                     if (buses != null) {
                         JSONArray lineas = buses.optJSONArray("lineas");
@@ -493,26 +637,49 @@ public class BackgroundTrackerService extends Service implements LocationListene
 
                                             // "Alert only" journeys (origin ==
                                             // destination) finish automatically
-                                            // once the bus is at the stop.
+                                            // once the bus is really standing at
+                                            // the stop, confirmed on two
+                                            // consecutive answered polls so a
+                                            // single odd sample cannot end the
+                                            // journey early.
                                             // Modo "solo aviso": termina solo
-                                            // cuando el bus está en la parada.
-                                            if (destinationStopId == originStopId && waitTime == 0) {
-                                                scheduleStopAfter(45);
+                                            // cuando el bus está de verdad en la
+                                            // parada, confirmado en dos sonadas
+                                            // seguidas para que una muestra suelta
+                                            // no lo corte antes de tiempo.
+                                            if (destinationStopId == originStopId) {
+                                                if (busIsAtStop(bObj, waitTime)) {
+                                                    originSeenAtStop = true;
+                                                    if (++originArrivedPolls >= ARRIVAL_CONFIRM_POLLS) {
+                                                        scheduleStopAfter(45);
+                                                    }
+                                                } else {
+                                                    originArrivedPolls = 0;
+                                                }
                                             }
                                         }
                                         break;
                                     }
                                 }
                             }
-                            // Alert-only journey whose arrival alert already fired
-                            // and whose bus is no longer listed (it arrived or
-                            // passed): finish, otherwise the service would keep
-                            // polling forever.
-                            // Viaje "solo aviso" cuyo aviso ya se lanzó y el bus ya
-                            // no aparece (llegó o pasó): se acaba el seguimiento,
-                            // si no, el servicio seguiría sondeando sin fin.
-                            if (destinationStopId == originStopId && !originFound && etaTriggered) {
-                                scheduleStopAfter(30);
+                            // Backstop for "alert only" journeys: the bus was
+                            // reported at the stop and is no longer listed at
+                            // all, so it arrived and went away (or the feed
+                            // dropped it). Only a streak of *answered* polls
+                            // counts -- a failed fetch proves nothing, and
+                            // before the alert fires the bus is legitimately
+                            // absent because it has not come near yet.
+                            // Red de seguridad del modo "solo aviso": el bus se
+                            // informó en la parada y ya no aparece, así que
+                            // llegó y se marchó. Solo cuentan sonadas que
+                            // respondieron: un fallo de red no prueba nada, y
+                            // antes del aviso el bus aún no se ha acercado.
+                            if (destinationStopId == originStopId) {
+                                if (originFound) {
+                                    originMissingPolls = 0;
+                                } else if (originSeenAtStop && ++originMissingPolls >= MISSING_POLLS_TO_FINISH) {
+                                    scheduleStopAfter(30);
+                                }
                             }
                         }
                     }
@@ -532,6 +699,7 @@ public class BackgroundTrackerService extends Service implements LocationListene
                 try {
                     JSONObject dObj = new JSONObject(destJson);
                     if ("OK".equalsIgnoreCase(dObj.optString("resultado"))) {
+                        pollGotData = true;
                         JSONObject dBuses = dObj.optJSONObject("buses");
                         if (dBuses != null) {
                             JSONArray dLineas = dBuses.optJSONArray("lineas");
@@ -554,27 +722,46 @@ public class BackgroundTrackerService extends Service implements LocationListene
                                                     gpsTriggered = true;
                                                     fireDestinationAlert();
                                                 }
-                                                // The bus is at the destination
-                                                // stop: the journey is over.
+                                                // The bus is standing at the
+                                                // destination stop: the journey is
+                                                // over. Confirmed twice, so one
+                                                // bad sample cannot end it early.
                                                 // El bus está en la parada de
-                                                // destino: viaje terminado.
-                                                if (dTime == 0) {
-                                                    scheduleStopAfter(45);
+                                                // destino: viaje terminado. Se
+                                                // confirma dos veces para que una
+                                                // muestra suelta no lo corte.
+                                                if (busIsAtStop(db, dTime)) {
+                                                    destSeenAtStop = true;
+                                                    if (++destArrivedPolls >= ARRIVAL_CONFIRM_POLLS) {
+                                                        scheduleStopAfter(45);
+                                                    }
+                                                } else {
+                                                    destArrivedPolls = 0;
                                                 }
                                             }
                                             break;
                                         }
                                     }
                                 }
-                                // The destination feed stopped reporting the bus
-                                // right after it was within 1-2 min (or after the
-                                // "press the stop button" alert fired): it reached
-                                // the terminus, finish instead of polling forever.
-                                // El feed de destino deja de listar el bus justo
-                                // cuando estaba a 1-2 min (o tras avisar de bajada):
-                                // llegó a la cabecera; se acaba el sondeo.
-                                if (!destFound && (gpsTriggered || (lastDestEta >= 0 && lastDestEta <= 2))) {
-                                    scheduleStopAfter(60);
+                                // Backstop: the bus was reported at the
+                                // destination and is no longer listed at all
+                                // (it reached the terminus and the feed dropped
+                                // it, or it came and went): finish instead of
+                                // polling forever. Notice what is NOT a reason
+                                // to stop: the alert having fired. That used to
+                                // be enough, so a single poll that did not list
+                                // the bus while it was still minutes away killed
+                                // the journey.
+                                // Red de seguridad: el bus se informó en
+                                // destino y ya no aparece (llegó a cabecera, o
+                                // llegó y se marchó). Lo que YA NO es motivo
+                                // para parar: que haya saltado el aviso, que
+                                // antes bastaba y cortaba el viaje con el bus
+                                // aún a minutos.
+                                if (destFound) {
+                                    destMissingPolls = 0;
+                                } else if (destSeenAtStop && ++destMissingPolls >= MISSING_POLLS_TO_FINISH) {
+                                    scheduleStopAfter(30);
                                 }
                             }
                         }
@@ -583,6 +770,19 @@ public class BackgroundTrackerService extends Service implements LocationListene
                     Log.w(TAG, "Error checking dest ETA", e);
                 }
             }
+        }
+
+        // Last resort: minutes of nothing but failed reads. Without a single
+        // usable feed no alert can ever fire, so from here on the service only
+        // costs battery.
+        // Último recurso: minutos sin leer nada. Sin un solo feed utilizable no
+        // puede sonar ningún aviso, así que a partir de aquí el servicio solo
+        // gasta batería.
+        if (pollGotData) {
+            failedPolls = 0;
+        } else if (++failedPolls >= FAILED_POLLS_TO_FINISH) {
+            Log.i(TAG, "No usable data in " + failedPolls + " polls, stopping");
+            scheduleStopAfter(15);
         }
     }
 
@@ -830,6 +1030,15 @@ public class BackgroundTrackerService extends Service implements LocationListene
         if (atPrev || passedPrev || approachingDest) {
             gpsTriggered = true;
             fireDestinationAlert();
+            // This alert can fire from the previous stop, which is still a walk
+            // away, so it cannot end the journey on its own. Re-check shortly
+            // instead: if the user is then standing on the destination, they
+            // are there and the trip is over.
+            // Este aviso puede saltar desde la parada anterior, todavía a un
+            // paseo, así que no puede acabar el viaje él solo. Se vuelve a
+            // comprobar: si el usuario está en la parada de destino, el viaje
+            // ha terminado.
+            scheduleUserArrivalCheck(90);
         }
     }
 

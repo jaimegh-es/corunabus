@@ -942,12 +942,22 @@ const t = getTranslations(lang);
       });
 
       // The line is listed whole, so the first stop still ahead of the bus can
-      // sit well below the fold, after every stop it has already passed. Start
-      // the scroll there: that is where the choices the bus can serve begin.
-      const list = this.querySelector('.tracker-dest-list');
-      const firstAhead = list?.querySelector('.tracker-dest-item-wrap.is-ahead');
-      if (list && firstAhead && firstAhead.offsetTop !== undefined) {
-        list.scrollTop = Math.max(0, firstAhead.offsetTop - list.offsetTop - 4);
+      // sit well below the fold, after every stop it has already passed. Bring
+      // it into view only when it is not visible: scrolling unconditionally
+      // moved the rows under a finger that was already on the list, so a tap
+      // aimed at one stop landed on another.
+      // La línea va entera, así que la primera parada por delante puede quedar
+      // muy por debajo, tras todas las ya pasadas. Se trae a la vista solo si no
+      // se ve: hacerlo siempre movía las filas bajo el dedo y el toque caía en
+      // otra parada.
+      const list = this.querySelector('.tracker-dest-list') as HTMLElement | null;
+      const firstAhead = list?.querySelector('.tracker-dest-item-wrap.is-ahead') as HTMLElement | null;
+      if (list && firstAhead) {
+        const top = firstAhead.offsetTop - list.offsetTop;
+        const bottom = top + firstAhead.offsetHeight;
+        if (top < list.scrollTop || bottom > list.scrollTop + list.clientHeight) {
+          list.scrollTop = Math.max(0, top - 4);
+        }
       }
 
       this.querySelectorAll('.tracker-dest-track').forEach(btn => {
@@ -1117,15 +1127,27 @@ const t = getTranslations(lang);
       const originId = routeInfo.nearestIdx >= 0
         ? parseInt(routeInfo.route.paradas[routeInfo.nearestIdx])
         : NaN;
-      const bus = this.currentBus?.bus;
+      const current = this.currentBus;
+      const bus = current?.bus;
 
       if (!bus || isNaN(destId) || isNaN(originId)) return;
 
       tracking.set({
         busId: bus.bus.toString(),
-        lineId: this.currentBus.line.id,
+        lineId: current.line.id,
         destinationStopId: destId,
         originStopId: originId,
+        // Only stops ahead of the bus are offered, so the journey is already
+        // "ride to this stop": starting in the boarding phase would count down
+        // to the stop the bus is leaving right now (an out-of-place "the bus
+        // has arrived, board it") and, once the bus went past it, would wait
+        // forever for an arrival that never comes.
+        // Solo se ofrecen paradas por delante del bus, así que el viaje ya es
+        // "llegar hasta aquí": empezar en la fase de subida contaría hasta la
+        // parada que el bus acaba de dejar (un "el bus ha llegado, sube" fuera
+        // de sitio) y, al pasar el bus, esperaría en vano una llegada que no
+        // llega.
+        phase: 'toDest',
         lastEta: null,
         arrivalTime: null
       });

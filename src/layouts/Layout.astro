@@ -1726,6 +1726,7 @@ const { title } = Astro.props;
 
 <script>
     import { tracking, getWalkHeadStart } from "../utils/tracking";
+    import { readBusStops, resolveBusRoute } from "../utils/trackingRoute";
     import { API, isApiLoading, isApiCooldownActive } from "../services/api";
     import { storage } from "../utils/storage";
     import { getTranslations } from "../utils/i18n";
@@ -1937,6 +1938,38 @@ const { title } = Astro.props;
     // aunque el feed deje de listarlo justo en/después de la parada.
     let lastDestObserved = -1;
     let destGoneStreak = 0;
+    // Consecutive func=2 polls that no longer list the tracked bus ANYWHERE on
+    // its line. The line info always reports every bus in service, so two polls
+    // without it mean the bus left service (terminus, out of service) and the
+    // journey is over: it guarantees tracking always ends on its own, even when
+    // neither the destination feed nor the route match can decide it (variants,
+    // a destination the bus serves from a different route, ...).
+    let lineBusMissingStreak = 0;
+    // Hard limit for a single journey. Every arrival path (the destination feed,
+    // the live position, the bus leaving the line) has a way of missing, and a
+    // tracking bar that never goes away is worse than one that stops early: this
+    // long after the start the journey is over whatever the feeds say.
+    // Límite duro del viaje. Todas las vías de llegada pueden fallar, y una barra
+    // que no se retira es peor que una que se retira antes: pasado este tiempo el
+    // viaje ha acabado digan lo que digan los feeds.
+    const MAX_JOURNEY_MS = 90 * 60 * 1000;
+    let journeyStartedAt = 0;
+    let journeySignature = "";
+
+    function checkJourneyTimeLimit(info: any) {
+        const signature = `${info.busId}|${info.lineId}|${info.originStopId}|${info.destinationStopId}`;
+        if (signature !== journeySignature) {
+            journeySignature = signature;
+            journeyStartedAt = Date.now();
+        }
+        if (!journeyStartedAt) {
+            journeyStartedAt = Date.now();
+            return;
+        }
+        if (Date.now() - journeyStartedAt > MAX_JOURNEY_MS) {
+            finishTracking(t.trackingFinishedTitle, t.trackingFinishedBody);
+        }
+    }
 
     // Re-render the tracking bar right after a phase transition (the current
     // update is still holding `isUpdating`, so a plain call would be skipped).
@@ -2185,18 +2218,16 @@ const { title } = Astro.props;
             lastDestObserved = time;
             destGoneStreak = 0;
             renderDestEta(time);
-            // On Android the native service emits the "press the stop button"
-            // alert from this same feed (≤2 min) even with GPS disabled: mirror
-            // that moment so the journey also auto-ends 1 min after the alert
-            // when the app is open. On web only the GPS path emits the alert,
-            // so only that one starts the countdown.
-            // En Android el servicio nativo emite el aviso de "pulsa el botón"
-            // desde este mismo feed (≤2 min) aunque el GPS esté desactivado:
-            // replicamos ese momento para que el viaje también acabe 1 min
-            // después del aviso con la app abierta. En web solo el aviso por
-            // GPS se emite, así que solo ese inicia la cuenta.
-            if (time <= 2 && isNativePlatform()) scheduleJourneyAutoEnd();
-            // On arrival at the destination: finish tracking to save battery.
+            // The journey ends when the bus reaches the stop, not when it is
+            // still a couple of minutes away: ending on "≤2 min" left the user a
+            // "tracking stopped" notice a minute before arriving, with the
+            // notifications already gone. It was needed while a bus missing from
+            // this feed had no other way to end the trip; the live position below
+            // and the bus leaving the line cover that now.
+            // El viaje acaba cuando el bus llega a la parada, no cuando aún le
+            // quedan un par de minutos: así el aviso de "seguimiento finalizado"
+            // salía un minuto antes de llegar y sin notificaciones. Hacía falta
+            // mientras un bus ausente de este feed no tenía otra vía de acabar.
             if (time <= 0) {
                 finishTracking(t.trackingFinishedTitle, t.trackingFinishedBody);
             }
@@ -2238,74 +2269,84 @@ const { title } = Astro.props;
                 if (gen !== trackingGeneration || !tracking.get()) return;
 
                 const catalog = storage.getCatalog();
-                if (lineData && lineData.paradas && catalog) {
-                    // Find the stops where the bus currently is (live position).
-                    const busStopIds: number[] = [];
-                    if (Array.isArray(lineData.paradas)) {
-                        for (const dir of lineData.paradas) {
-                            if (!Array.isArray(dir.paradas)) continue;
-                            for (const p of dir.paradas) {
-                                if (
-                                    Array.isArray(p.buses) &&
-                                    p.buses.some(
-                                        (b: any) => b.bus && b.bus.toString() === info.busId.toString(),
-                                    )
-                                ) {
-                                    busStopIds.push(parseInt(p.id.toString()));
-                                }
-                            }
-                        }
+                // A usable answer: every bus in service is listed, so a bus
+                // missing from all of them is out of service (terminus, low
+                // service) and the journey is over. Two consecutive polls, so a
+                // transient gap doesn't end it early. This is what guarantees
+                // tracking always ends on its own, even when neither the
+                // destination feed nor the routes can decide it.
+                // Una respuesta utilizable: se listan todos los buses en
+                // servicio, así que un bus que no aparece en ninguno acabó el
+                // recorrido. Dos polls seguidas, para no cortar por un fallo
+                // puntual. Es lo que garantiza que el seguimiento siempre acabe.
+                const lineDataOk = !!(
+                    lineData &&
+                    Array.isArray(lineData.paradas) &&
+                    lineData.paradas.length > 0 &&
+                    (lineData.resultado === 'OK' || !lineData.resultado)
+                );
+
+                // Where the bus is right now, and the direction it travels in.
+                const { sentido, stops } = readBusStops(lineData, info.busId);
+
+                if (stops.length > 0) {
+                    lineBusMissingStreak = 0;
+                } else if (lineDataOk) {
+                    lineBusMissingStreak++;
+                    if (lineBusMissingStreak >= 2) {
+                        lineBusMissingStreak = 0;
+                        lastDestObserved = 0;
+                        destGoneStreak = 0;
+                        finishTracking(t.trackingFinishedTitle, t.trackingFinishedBody);
+                        return;
+                    }
+                }
+
+                if (stops.length > 0 && catalog) {
+                    const line = catalog.actualizacion.lineas.find(
+                        (l: any) => l.id.toString() === info.lineId.toString(),
+                    );
+                    const decision = resolveBusRoute(
+                        Array.isArray(line?.rutas) ? line.rutas : [],
+                        sentido,
+                        stops,
+                        info.destinationStopId,
+                    );
+
+                    if (decision.kind === 'past' || decision.kind === 'arrived') {
+                        // The bus has gone through the destination stop (or is
+                        // standing on it): the journey is over.
+                        lastDestObserved = 0;
+                        destGoneStreak = 0;
+                        lineBusMissingStreak = 0;
+                        finishTracking(t.trackingFinishedTitle, t.trackingFinishedBody);
+                        return;
                     }
 
-                    if (busStopIds.length > 0) {
-                        const busAtStopId = busStopIds[0];
-                        const targetDestIdNum = parseInt(info.destinationStopId.toString());
-                        const line = catalog.actualizacion.lineas.find(
-                            (l: any) => l.id.toString() === info.lineId.toString(),
-                        );
-                        if (line && Array.isArray(line.rutas)) {
-                            for (const route of line.rutas) {
-                                if (!Array.isArray(route.paradas)) continue;
-                                const routeParadas = route.paradas.map((p) => parseInt(p.toString()));
-                                const bIdx = routeParadas.indexOf(busAtStopId);
-                                const dIdx = routeParadas.indexOf(targetDestIdNum);
-                                if (bIdx !== -1 && dIdx !== -1) {
-                                    // Live position shows the bus AT or PAST the
-                                    // destination stop -> journey over.
-                                    // La posición del bus lo muestra EN o MÁS
-                                    // ALLÁ de la parada de destino -> fin.
-                                    if (bIdx >= dIdx) {
-                                        lastDestObserved = 0;
-                                        destGoneStreak = 0;
-                                        finishTracking(t.trackingFinishedTitle, t.trackingFinishedBody);
-                                        return;
-                                    }
-                                    stopsLeft = dIdx - bIdx;
-                                    foundInLine = true;
+                    if (decision.kind === 'ahead') {
+                        stopsLeft = decision.stopsLeft;
+                        foundInLine = true;
+                        const bIdx = decision.busIndex;
 
-                                    // Keep a per-stop travel average from real
-                                    // observations of the bus moving.
-                                    const now = Date.now();
-                                    if (lastBusStopIdx !== -1 && lastBusStopIdx !== bIdx) {
-                                        const elapsedSec = (now - lastBusPosTime) / 1000;
-                                        const moved = Math.abs(bIdx - lastBusStopIdx);
-                                        if (elapsedSec > 0 && moved > 0) {
-                                            const secPerStop = elapsedSec / moved;
-                                            avgSecPerStop = avgSecPerStop === null
-                                                ? secPerStop
-                                                : avgSecPerStop * 0.7 + secPerStop * 0.3;
-                                        }
-                                    }
-                                    lastBusPosTime = now;
-                                    lastBusStopIdx = bIdx;
-
-                                    const defaultSecPerStop = 150;
-                                    const perStop = avgSecPerStop ?? defaultSecPerStop;
-                                    etaMins = Math.max(1, Math.round((stopsLeft * perStop) / 60));
-                                    break;
-                                }
+                        // Keep a per-stop travel average from real
+                        // observations of the bus moving.
+                        const now = Date.now();
+                        if (lastBusStopIdx !== -1 && lastBusStopIdx !== bIdx) {
+                            const elapsedSec = (now - lastBusPosTime) / 1000;
+                            const moved = Math.abs(bIdx - lastBusStopIdx);
+                            if (elapsedSec > 0 && moved > 0) {
+                                const secPerStop = elapsedSec / moved;
+                                avgSecPerStop = avgSecPerStop === null
+                                    ? secPerStop
+                                    : avgSecPerStop * 0.7 + secPerStop * 0.3;
                             }
                         }
+                        lastBusPosTime = now;
+                        lastBusStopIdx = bIdx;
+
+                        const defaultSecPerStop = 150;
+                        const perStop = avgSecPerStop ?? defaultSecPerStop;
+                        etaMins = Math.max(1, Math.round((stopsLeft * perStop) / 60));
                     }
                 }
             } catch (lineErr) {
@@ -2342,6 +2383,9 @@ const { title } = Astro.props;
             phase1BusSeen = false;
             lastDestObserved = -1;
             destGoneStreak = 0;
+            lineBusMissingStreak = 0;
+            journeyStartedAt = 0;
+            journeySignature = "";
             if (trackingInterval) {
                 clearInterval(trackingInterval);
                 trackingInterval = null;
@@ -2353,6 +2397,11 @@ const { title } = Astro.props;
         const gen = trackingGeneration;
         bar.style.display = "block";
         document.getElementById("track-bus-id")!.textContent = info.busId;
+        checkJourneyTimeLimit(info);
+        if (!tracking.get()) {
+            isUpdating = false;
+            return;
+        }
 
         // Global circuit breaker open: pause network polling, keep the bar alive.
         if (isApiCooldownActive()) {

@@ -162,8 +162,12 @@ export async function getQuery(func: number, dato: string) {
   let fallbackUrl = directUrl;
 
   if (Capacitor.isNativePlatform()) {
-    // In Android native app, try direct first for zero proxy lag, fallback to prod proxy
-    primaryUrl = directUrl;
+    // The upstream sends no CORS headers, so a WebView fetch to it is always
+    // blocked and every "direct first" attempt just wastes a round trip and a
+    // retry. The relative proxy is same-origin both in production (the app is
+    // served from the API host) and when testing against a local dev server,
+    // so it always answers. Keep the cross-origin proxy as the rescue path.
+    primaryUrl = proxyUrl;
     fallbackUrl = prodProxyUrl;
   }
 

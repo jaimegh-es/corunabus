@@ -59,6 +59,9 @@ type Tracker = {
   querySelector(sel: string): any;
 };
 
+/** Journeys the component started, as handed to the tracking store. */
+const startedJourneys: any[] = [];
+
 const MARKUP = (() => {
   const astro = readFileSync(componentPath, 'utf8');
   return astro.slice(
@@ -84,7 +87,7 @@ const MARKUP = (() => {
   )(
     { getCatalog: () => CATALOG },
     { getMapData: async () => ({ resultado: 'OK', mapas: [{ buses: [] }] }) },
-    { set: () => {} },
+    { set: (info: any) => startedJourneys.push(info) },
     async () => null,
     () => STRINGS,
   );
@@ -210,6 +213,25 @@ describe('BusTracker destination list', () => {
 
     doc.querySelectorAll('.tracker-dest-item')[1].click();
     expect(actions.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('starts the journey already riding towards the chosen stop', () => {
+    const { el, doc, line } = mountTracker();
+    startedJourneys.length = 0;
+    // On the outbound route, at Cantón Grande: stops 4 and 5 are ahead.
+    detect(el, doc, line, { num: 9, posy: 43.35, posx: -8.4, sentido: '0' });
+
+    doc.querySelector('.tracker-dest-track[data-stop-id="5"]').click();
+
+    expect(startedJourneys).toHaveLength(1);
+    const journey = startedJourneys[0];
+    expect(journey.busId).toBe('9');
+    expect(journey.destinationStopId).toBe(5);
+    // The bus is at stop 3 and the chosen stop is further on, so this is a
+    // "get me there" journey: counting down to a bus boarding at the stop the
+    // bus is leaving right now announced a wrong arrival and could wait forever.
+    expect(journey.originStopId).toBe(3);
+    expect(journey.phase).toBe('toDest');
   });
 
   it('keeps every row at full height inside the scrolling list', () => {

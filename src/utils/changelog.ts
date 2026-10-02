@@ -14,6 +14,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: '0.0.10',
+        title: '🚌 El seguimiento ya no se corta antes de tiempo',
+        items: [
+            'El seguimiento se acababa solo un minuto después del aviso "pulsa el botón de parada", con el autobús todavía a varios minutos. Ahora solo termina cuando el bus está realmente en la parada de destino, o cuando llegas tú, y siempre con confirmación.',
+            'El bus ya no se pierde de un salto: un fallo puntual de datos o un aviso de la operadora ya no matan el viaje. Antes un solo sondeo fallido lo cortaba.',
+            'Si pasan minutos sin poder leer datos, o el viaje se alarga demasiado, el seguimiento se cierra solo en lugar de quedarse sonando y gastando batería.',
+            'Al buscar un bus por número se muestra la línea entera, en los dos sentidos, marcando con un punto verde las paradas que te quedan por delante. Las filas se pueden pulsar sin tener que afinar el dedo.',
+            'En la app de Android ya se ven los horarios: salía "Error de conexión" porque las peticiones al servidor de datos no llegaban desde el móvil.',
+        ],
+    },
+    {
         version: '0.0.9',
         title: '🔧 Aviso de bloqueo corregido',
         items: [
