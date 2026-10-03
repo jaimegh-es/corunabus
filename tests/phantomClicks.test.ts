@@ -113,6 +113,43 @@ describe('guardPhantomClicks', () => {
     stop();
   });
 
+  it('drops the click a scroll emits through compatibility mouse events', () => {
+    const { root, links, opened, stop } = mount(
+      '<a data-id="a" href="/stop/1">A</a><a data-id="b" href="/stop/2">B</a>',
+    );
+    const dispose = guardPhantomClicks(root);
+
+    // Exactly what Android Chrome does after a drag that scrolls: the pointer is
+    // cancelled, and only then are the compatibility mouse events emitted, at
+    // the position where the finger actually lifted. Watching mousedown there
+    // restarts the record and hands the click to the item that scrolled under
+    // the finger, which is the auto-click being reported.
+    fire(links[0], 'pointerdown', { x: 100, y: 200 });
+    fire(links[0], 'pointermove', { x: 100, y: 600 });
+    fire(links[0], 'pointercancel');
+    fire(links[1], 'mousedown', { x: 100, y: 600 });
+    fire(links[1], 'click', { x: 100, y: 600 });
+
+    expect(opened).toEqual([]);
+    dispose();
+    stop();
+  });
+
+  it('still opens the tapped item after a scroll that led nowhere', () => {
+    const { root, links, opened, stop } = mount(
+      '<a data-id="a" href="/stop/1">A</a><a data-id="b" href="/stop/2">B</a>',
+    );
+    const dispose = guardPhantomClicks(root);
+
+    // A real tap after scrolling: fresh pointer sequence, finger stays put.
+    fire(links[1], 'pointerdown', { x: 100, y: 600 });
+    fire(links[1], 'click', { x: 100, y: 600 });
+
+    expect(opened).toEqual(['b']);
+    dispose();
+    stop();
+  });
+
   it('keeps hand-built click events working', () => {
     const { root, links, opened, stop } = mount('<a data-id="a" href="/stop/1">A</a>');
     const dispose = guardPhantomClicks(root);

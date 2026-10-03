@@ -14,6 +14,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: '0.0.12',
+        title: '👆 Ahora sí: los favoritos no se abren solos',
+        items: [
+            'El arreglo anterior no llegaba a funcionar en Android. Al terminar un deslizamiento, el navegador emite unos eventos de ratón "de compatibilidad" después de cancelar el toque, justo en el punto donde levantaste el dedo, y eso reintentaba registrar el toque justo antes del clic. Por eso la lista se abría igualmente.',
+            'Ahora se escucha un único tipo de evento de puntero, nunca varios a la vez, así que el clic se contrasta con el gesto que de verdad lo produjo y se descarta si el dedo se había movido.',
+        ],
+    },
+    {
         version: '0.0.11',
         title: '👆 Los favoritos ya no se pulsan solos',
         items: [

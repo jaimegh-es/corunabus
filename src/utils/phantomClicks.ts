@@ -118,29 +118,40 @@ export function guardPhantomClicks(
     event.stopPropagation();
   }
 
-  root.addEventListener('pointerdown', onPress, true);
-  root.addEventListener('pointermove', onDrag, true);
-  root.addEventListener('pointercancel', onRelease, true);
-  // A touch that turned into a scroll never produces the press we recorded, and
-  // browsers differ on which event they do emit for it.
-  root.addEventListener('touchstart', onPress, true);
-  root.addEventListener('touchmove', onDrag, true);
-  root.addEventListener('touchcancel', onRelease, true);
-  root.addEventListener('mousedown', onPress, true);
-  root.addEventListener('mousemove', onDrag, true);
-  root.addEventListener('dragstart', onRelease, true);
-  root.addEventListener('click', onClick, true);
+  const attached: Array<[string, EventListener]> = [];
+  const attach = (type: string, handler: EventListener) => {
+    root.addEventListener(type, handler, true);
+    attached.push([type, handler]);
+  };
+
+  // Exactly one pointer source, never two. After a touch gesture Android also
+  // emits the compatibility mouse events (mousedown, mouseup, click) *after*
+  // pointercancel, at the position where the finger lifted. Listening to
+  // mousedown as well therefore restarted the record right before the click,
+  // wiping both "the finger moved" and "where the finger went down", and the
+  // click reached whichever card the scroll had parked under it. That made the
+  // guard a no-op on exactly the gesture it existed for.
+  // Una sola fuente de puntero, nunca dos.
+  const hasPointers = typeof window !== 'undefined' && 'PointerEvent' in window;
+  const hasTouch = !hasPointers && typeof window !== 'undefined' && 'ontouchstart' in window;
+
+  if (hasPointers) {
+    attach('pointerdown', onPress);
+    attach('pointermove', onDrag);
+    attach('pointercancel', onRelease);
+  } else if (hasTouch) {
+    attach('touchstart', onPress);
+    attach('touchmove', onDrag);
+    attach('touchcancel', onRelease);
+  } else {
+    attach('mousedown', onPress);
+    attach('mousemove', onDrag);
+  }
+  attach('dragstart', onRelease);
+  attach('click', onClick);
 
   return () => {
-    root.removeEventListener('pointerdown', onPress, true);
-    root.removeEventListener('pointermove', onDrag, true);
-    root.removeEventListener('pointercancel', onRelease, true);
-    root.removeEventListener('touchstart', onPress, true);
-    root.removeEventListener('touchmove', onDrag, true);
-    root.removeEventListener('touchcancel', onRelease, true);
-    root.removeEventListener('mousedown', onPress, true);
-    root.removeEventListener('mousemove', onDrag, true);
-    root.removeEventListener('dragstart', onRelease, true);
-    root.removeEventListener('click', onClick, true);
+    for (const [type, handler] of attached) root.removeEventListener(type, handler, true);
+    attached.length = 0;
   };
 }
