@@ -33,12 +33,18 @@ const t = getTranslations(lang);
     const lang = document.documentElement.getAttribute('data-lang') || 'es';
     const t = getTranslations(lang);
 
-    // Rebuilding the list while a finger is on it is what makes an item open on
-    // its own: the tap was aimed at the old DOM and the click lands on whatever
-    // replaced it. Skipping a repaint that changes nothing removes the commonest
-    // trigger, and guardPhantomClicks catches the rest.
-    // Repintar la lista con el dedo encima es lo que hace que un item se abra
-    // solo: el toque apuntaba al DOM viejo y el click cae en el nuevo.
+    // The cards are NOT <a href> on purpose. On real WebViews a scroll gesture
+    // that starts on an anchor ends, once the fling settles, in the engine
+    // natively activating that anchor — with no DOM click at all, so no
+    // listener can block it (the favourites auto-open after scrolling). A plain
+    // element cannot be activated natively; navigation happens only through the
+    // trusted click below, which guardPhantomClicks validates.
+    // Las tarjetas NO son <a href> a propósito: en WebViews reales, un gesto de
+    // scroll que empieza en un enlace termina, al asentarse el fling, activando
+    // nativamente ese enlace — sin ningún click DOM, así que ningún listener
+    // puede bloquearlo. Un elemento plano no se puede activar nativamente; la
+    // navegación solo ocurre por el click de confianza de abajo, validado por
+    // guardPhantomClicks.
     let lastRenderedHtml: string | null = null;
 
     function paint(container: HTMLElement, html: string): boolean {
@@ -99,7 +105,7 @@ const t = getTranslations(lang);
               const displayName = stopNames[String(id)] || s.nombre;
               const hasAlias = !!stopNames[String(id)];
               return `
-                <a href="/stop/${s.id}" class="card stop-card-link">
+                <div class="card stop-card-link" role="link" tabindex="0" data-href="/stop/${s.id}">
                   <div class="stop-info">
                     <strong>${displayName}</strong>
                     <small>${hasAlias ? `${s.nombre} · ` : ''}${lang === 'en' ? 'Stop' : 'Parada'} ${s.id}</small>
@@ -115,7 +121,7 @@ const t = getTranslations(lang);
                     <button type="button" class="rename-stop-btn icon-btn" data-stop-id="${s.id}" data-stop-name="${s.nombre}" title="${lang === 'en' ? 'Rename stop' : 'Renombrar parada'}" aria-label="${lang === 'en' ? 'Rename stop' : 'Renombrar parada'}"><i data-lucide="pencil"></i></button>
                     <div class="stop-arrow"><i data-lucide="chevron-right"></i></div>
                   </div>
-                </a>
+                </div>
               `;
             }).join('')}
           </div>
@@ -146,7 +152,7 @@ const t = getTranslations(lang);
               const rHref = `/stop/${r.originId}?${rParams.toString()}`;
               
               return `
-                <a href="${rHref}" class="card route-fav-card favorite-route-link" style="--line-color: ${color}" data-dest="${r.destId}">
+                <div class="card route-fav-card favorite-route-link" role="link" tabindex="0" style="--line-color: ${color}" data-href="${rHref}" data-dest="${r.destId}">
                   <div class="route-fav-header">
                     <span class="line-badge-small" style="background-color: ${color}">${r.lineName}</span>
                     <div class="route-fav-text">
@@ -155,7 +161,7 @@ const t = getTranslations(lang);
                     </div>
                   </div>
                   <div class="stop-arrow"><i data-lucide="chevron-right"></i></div>
-                </a>
+                </div>
               `;
             }).join('')}
           </div>
@@ -203,7 +209,7 @@ const t = getTranslations(lang);
               const href = `/planner?${params.toString()}`;
 
               return `
-                <a href="${href}" class="card route-fav-card favorite-planner-link" style="--line-color: var(--primary)">
+                <div class="card route-fav-card favorite-planner-link" role="link" tabindex="0" style="--line-color: var(--primary)" data-href="${href}">
                   <div class="route-fav-header">
                     <span class="line-badge-small flex-center" style="background-color: var(--primary); display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;">
                       <i data-lucide="map" style="width: 16px; height: 16px; color: white;"></i>
@@ -217,7 +223,7 @@ const t = getTranslations(lang);
                     </div>
                   </div>
                   <div class="stop-arrow"><i data-lucide="chevron-right"></i></div>
-                </a>
+                </div>
               `;
             }).join('')}
           </div>
@@ -226,6 +232,29 @@ const t = getTranslations(lang);
 
       if (!paint(container, html)) return;
       createIcons({ icons: { Star, Heart, ChevronRight, Map, Pencil } });
+
+      // Navigation for the cards now that they are not anchors: a trusted
+      // click only (real tap, keyboard via the keydown path). Clicks flattened
+      // onto an inner button are the rename pencil, handled below; untrusted
+      // clicks (code-built events) never navigate.
+      // Navegación de las tarjetas ahora que no son enlaces: solo click de
+      // confianza (toque real, o teclado por el keydown). El botón del lápiz
+      // se gestiona abajo; los clicks no confiables nunca navegan.
+      container.querySelectorAll<HTMLElement>('.stop-card-link, .route-fav-card').forEach((card) => {
+        const href = card.getAttribute('data-href');
+        if (!href) return;
+        card.addEventListener('click', (e) => {
+          if (!e.isTrusted) return;
+          if (e.target instanceof Element && e.target.closest('button')) return;
+          window.location.href = href;
+        });
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            window.location.href = href;
+          }
+        });
+      });
 
       // Add listeners to favorite route links to set target destination
       // Añadir oyentes a los enlaces de rutas favoritas para establecer la parada destino
@@ -336,6 +365,7 @@ const t = getTranslations(lang);
     margin-bottom: 1rem;
     text-decoration: none;
     color: inherit;
+    cursor: pointer;
   }
 
   .route-fav-card {
