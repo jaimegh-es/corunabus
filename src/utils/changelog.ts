@@ -14,6 +14,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: '0.0.13',
+        title: '👆 Los favoritos se abrían solos al arrastrar la lista',
+        items: [
+            'Quedaba una forma más en la que se abrían solos: si apoyas el dedo sobre una tarjeta y arrastras la lista poco, ese gesto sí se interpretaba como un toque y abría esa tarjeta. Con muchas tarjetas no queda espacio para apoyarse en otro sitio, así que era lo normal.',
+            'La comprobación anterior medía cuánto se movía el dedo, que es el instrumento equivocado: un empujón recorre mucha lista por cada píxel del dedo. Ahora se comprueba si la lista ha cambiado de posición al soltar el dedo. Un toque de verdad no la mueve.',
+            'Sigue funcionando con teclado y con lectores de pantalla.',
+        ],
+    },
+    {
         version: '0.0.12',
         title: '👆 Ahora sí: los favoritos no se abren solos',
         items: [

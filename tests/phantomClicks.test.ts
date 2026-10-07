@@ -150,6 +150,75 @@ describe('guardPhantomClicks', () => {
     stop();
   });
 
+  it('drops the click a short flick that scrolled the list', () => {
+    const { root, links, opened, stop } = mount(
+      '<a data-id="a" href="/stop/1">A</a><a data-id="b" href="/stop/2">B</a>',
+    );
+    const dispose = guardPhantomClicks(root);
+
+    // The reported gesture: the finger lands on a card and drags the list just a
+    // little, well inside the finger slop, but the list moves regardless. The
+    // finger distance says "tap", the scroll says otherwise, and the scroll is
+    // what the gesture was for.
+    fire(links[0], 'pointerdown', { x: 100, y: 200 });
+    fire(links[0], 'pointermove', { x: 100, y: 195 });
+    root.scrollTop = 240;
+    fire(links[0], 'click');
+
+    expect(opened).toEqual([]);
+    dispose();
+    stop();
+  });
+
+  it('drops the click when a nested list scrolls during the press', () => {
+    const { root, links, opened, stop } = mount(
+      '<div class="stops-list"><a data-id="a" href="/stop/1">A</a></div>',
+    );
+    const list = root.querySelector('.stops-list') as HTMLElement;
+    const dispose = guardPhantomClicks(root);
+
+    fire(links[0], 'pointerdown');
+    list.scrollTop = 90;
+    fire(links[0], 'click');
+
+    expect(opened).toEqual([]);
+    dispose();
+    stop();
+  });
+
+  it('drops the click when a scroll event arrives mid-press', () => {
+    const { root, links, opened, stop } = mount(
+      '<div class="stops-list"><a data-id="a" href="/stop/1">A</a></div>',
+    );
+    const list = root.querySelector('.stops-list') as HTMLElement;
+    const dispose = guardPhantomClicks(root);
+
+    fire(links[0], 'pointerdown');
+    // Scroll does not bubble, so the guard only sees it by capturing.
+    list.dispatchEvent(new Event('scroll'));
+    fire(links[0], 'click');
+
+    expect(opened).toEqual([]);
+    dispose();
+    stop();
+  });
+
+  it('opens the card when the press left every list where it was', () => {
+    const { root, links, opened, stop } = mount(
+      '<a data-id="a" href="/stop/1">A</a><a data-id="b" href="/stop/2">B</a>',
+    );
+    const dispose = guardPhantomClicks(root);
+
+    root.scrollTop = 400; // the list is somewhere down the page...
+    fire(links[1], 'pointerdown', { x: 100, y: 200 });
+    root.scrollTop = 400; // ...and stays exactly there while it is tapped
+    fire(links[1], 'click');
+
+    expect(opened).toEqual(['b']);
+    dispose();
+    stop();
+  });
+
   it('keeps hand-built click events working', () => {
     const { root, links, opened, stop } = mount('<a data-id="a" href="/stop/1">A</a>');
     const dispose = guardPhantomClicks(root);
