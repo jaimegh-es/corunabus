@@ -258,7 +258,7 @@ const t = getTranslations(lang);
                             const s = catalog.paradas[id];
                             if (!s) return '';
                             return `
-                                <a href="/stop/${s.id}" class="card fav-item">
+                                <div class="card fav-item" role="link" tabindex="0" data-href="/stop/${s.id}">
                                     <div class="fav-info">
                                         <strong>${s.nombre}</strong>
                                         <div class="fav-lines">
@@ -271,7 +271,7 @@ const t = getTranslations(lang);
                                         </div>
                                     </div>
                                     <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
-                                </a>
+                                </div>
                             `;
                         }).join('')}
                     </div>
@@ -290,7 +290,7 @@ const t = getTranslations(lang);
                             const originLabel = origin?.nombre || (lang === 'en' ? 'Origin' : 'Origen');
                             const fromLabel = lang === 'en' ? 'From' : 'Desde';
                             return `
-                                <a href="/stop/${r.originId}" class="card fav-item route-fav" style="--line-color: ${color}" data-dest="${r.destId}">
+                                <div class="card fav-item route-fav" role="link" tabindex="0" style="--line-color: ${color}" data-href="/stop/${r.originId}" data-dest="${r.destId}">
                                     <div class="route-info">
                                         <span class="route-line-badge" style="background-color: ${color}">${r.lineName}</span>
                                         <div class="route-text">
@@ -299,7 +299,7 @@ const t = getTranslations(lang);
                                         </div>
                                     </div>
                                     <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
-                                </a>
+                                </div>
                             `;
                         }).join('')}
                     </div>
@@ -307,10 +307,38 @@ const t = getTranslations(lang);
             }
             container.innerHTML = html;
             createIcons({ icons: { ChevronRight } });
-            container.querySelectorAll('.route-fav').forEach(link => {
-                link.addEventListener('click', () => {
+            container.querySelectorAll<HTMLElement>('.route-fav').forEach(link => {
+                const href = link.getAttribute('data-href');
+                link.addEventListener('click', (e) => {
+                    if (!e.isTrusted) return;
+                    if (e.target instanceof Element && e.target.closest('button')) return;
                     const destId = link.getAttribute('data-dest');
                     if (destId) tracking.setTargetDestination(parseInt(destId));
+                    if (href) window.location.href = href;
+                });
+                link.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const destId = link.getAttribute('data-dest');
+                        if (destId) tracking.setTargetDestination(parseInt(destId));
+                        if (href) window.location.href = href;
+                    }
+                });
+            });
+
+            container.querySelectorAll<HTMLElement>('.fav-item:not(.route-fav)').forEach((card) => {
+                const href = card.getAttribute('data-href');
+                if (!href) return;
+                card.addEventListener('click', (e) => {
+                    if (!e.isTrusted) return;
+                    if (e.target instanceof Element && e.target.closest('button')) return;
+                    window.location.href = href;
+                });
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        window.location.href = href;
+                    }
                 });
             });
         }
