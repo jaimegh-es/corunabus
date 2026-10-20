@@ -14,6 +14,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: '0.0.16',
+        title: '🔧 Ajustes de interfaz, permisos y favoritos',
+        items: [
+            'El aviso de novedades ya no se sale de la pantalla aunque el texto sea muy largo: el contenido hace scroll interno y los botones de cerrar y de aceptar se quedan siempre a la vista.',
+            'La web ya no pide el permiso de ubicación en cada subpágina que visitas: solo se pide en la página de inicio y, en el resto, se lee en silencio si ya lo concediste.',
+            'El inicio muestra todos tus favoritos de todos los tipos: paradas, rutas de línea y trayectos del planificador, sin límite de cantidad.',
+            'Nuevos enlaces a Discord y Telegram junto a los de GitHub y correo.',
+        ],
+    },
+    {
         version: '0.0.13',
         title: '👆 Los favoritos se abrían solos al arrastrar la lista',
         items: [

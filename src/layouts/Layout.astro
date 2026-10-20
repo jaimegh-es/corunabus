@@ -188,6 +188,26 @@ const { title } = Astro.props;
                             {t.sugerencias}
                         </a>
                     </div>
+                    <!-- Community links (Discord + Telegram)
+                         Enlaces de comunidad (Discord + Telegram) -->
+                    <div class="recommendation-actions">
+                        <a
+                            href="https://link.inled.es/discord"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="btn-community-subtle"
+                        >
+                            Discord
+                        </a>
+                        <a
+                            href="https://link.inled.es/telegram"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="btn-community-subtle"
+                        >
+                            Telegram
+                        </a>
+                    </div>
                     <p class="contact-info">
                         {t.contacto} <a
                             href="mailto:contacto@inled.es"
@@ -1417,6 +1437,26 @@ const { title } = Astro.props;
 
     .changelog-content {
         max-width: 420px;
+        /* The popup must NEVER leave the screen, even with a very long
+           changelog: cap its height to the viewport (the overlay adds 1rem of
+           padding on each side) and let the list scroll inside.
+           El popup NUNCA debe salirse de la pantalla aunque el changelog sea
+           largo: se limita su alto al viewport (el overlay suma 1rem de
+           padding por lado) y la lista hace scroll interno. */
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
+    }
+
+    .changelog-content .modal-body {
+        /* Inner scroll area: header and footer (close/OK buttons) always stay
+           visible on screen.
+           Zona con scroll interno: la cabecera y el pie (botones cerrar/OK)
+           se quedan siempre visibles en pantalla. */
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
     }
 
     .changelog-list {
@@ -1603,7 +1643,8 @@ const { title } = Astro.props;
     }
 
     .btn-share-subtle,
-    .btn-github-subtle {
+    .btn-github-subtle,
+    .btn-community-subtle {
         background: var(--bg);
         padding: 0.5rem 1.5rem;
         border-radius: 20px;
@@ -1613,6 +1654,10 @@ const { title } = Astro.props;
         text-decoration: none;
         display: inline-flex;
         align-items: center;
+    }
+
+    .btn-community-subtle {
+        gap: 0.4rem;
     }
 
     .contact-info {
@@ -3258,9 +3303,60 @@ const { title } = Astro.props;
     });
 
     // Auto-detect location from GPS on startup
-    getPosition().then((pos) => {
-        if (pos) storage.autoSelectLocationFromGPS(pos.lat, pos.lon);
-    });
+    // Detección automática de la ubicación por GPS al arrancar.
+    //
+    // En la web, cada subpágina es una carga completa, así que llamar a
+    // getCurrentPosition en el arranque de todas ellas hacía que el navegador
+    // pidiera el permiso de ubicación en cada página (/lines, /stops,
+    // /stop/123...). Ahora:
+    //  - App nativa o permiso ya concedido: se lee la posición en cualquier página.
+    //  - Web sin permiso: solo se pide en la página de inicio (una vez).
+    //  - Permiso denegado: no se vuelve a pedir (el usuario lo tiene bloqueado).
+    // On the web every subpage is a fresh load, so asking for the position on
+    // startup meant the browser prompted for location on each page. Now the
+    // permission is only requested on the home page (never on subpages), and
+    // read silently anywhere once it has been granted.
+    async function bootstrapLocationFromGPS() {
+        if (isNativePlatform()) {
+            const pos = await getPosition();
+            if (pos) storage.autoSelectLocationFromGPS(pos.lat, pos.lon);
+            return;
+        }
+
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+        const path = window.location.pathname;
+        const isHomePage = path === '/' || path === '/index.html';
+
+        const usePosition = () => {
+            getPosition().then((pos) => {
+                if (pos) storage.autoSelectLocationFromGPS(pos.lat, pos.lon);
+            });
+        };
+
+        // Permissions API available: never trigger a prompt on subpages.
+        // Disponible la Permissions API: nunca se dispara el aviso en subpáginas.
+        const perms = (navigator as any).permissions;
+        if (perms?.query) {
+            try {
+                const state = await perms.query({ name: 'geolocation' });
+                if (state.state === 'granted') {
+                    usePosition();
+                } else if (state.state === 'prompt' && isHomePage) {
+                    usePosition();
+                }
+                // 'denied': bloqueado por el usuario, no se vuelve a pedir.
+                return;
+            } catch {
+                // Si algo falla seguimos con la comprobación de abajo.
+            }
+        }
+
+        // Browser without Permissions API: ask only on the home page.
+        // Navegador sin Permissions API: se pide solo en el inicio.
+        if (isHomePage) usePosition();
+    }
+    bootstrapLocationFromGPS();
 
     const closeSettings = () => {
         if (settingsModal) {

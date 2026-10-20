@@ -227,9 +227,10 @@ const t = getTranslations(lang);
 
             const favIds = storage.getFavorites();
             const favRoutes = storage.getFavoriteRoutes();
+            const favPlannerRoutes = storage.getFavoritePlannerRoutes();
             const catalog = storage.getCatalog();
 
-            if (favIds.length === 0 && favRoutes.length === 0) {
+            if (favIds.length === 0 && favRoutes.length === 0 && favPlannerRoutes.length === 0) {
                 container.innerHTML = `
                     <div class="empty-favorites">
                         <p>${lang === 'en' ? 'You have no saved favorites.' : 'No tienes favoritos guardados.'}</p>
@@ -250,11 +251,17 @@ const t = getTranslations(lang);
                 return acc;
             }, {});
 
+            // The home summary shows EVERY favorite of EVERY type (stops,
+            // line routes and planner journeys), the full list: the "view all"
+            // link goes to /favorites for the management options.
+            // El resumen del inicio muestra TODOS los favoritos de TODOS los
+            // tipos (paradas, rutas de línea y trayectos del planificador),
+            // la lista completa: el enlace "ver todos" lleva a /favorites.
             let html = '';
             if (favIds.length > 0) {
                 html += `
                     <div class="summary-list">
-                        ${favIds.slice(0, 3).map(id => {
+                        ${favIds.map(id => {
                             const s = catalog.paradas[id];
                             if (!s) return '';
                             return `
@@ -281,7 +288,7 @@ const t = getTranslations(lang);
             if (favRoutes.length > 0) {
                 html += `
                     <div class="summary-list mt-1">
-                        ${favRoutes.slice(0, 2).map(r => {
+                        ${favRoutes.map(r => {
                             const origin = catalog.paradas[r.originId];
                             const dest = catalog.paradas[r.destId];
                             const line = lines.find((l: any) => l.id === r.lineId);
@@ -297,6 +304,54 @@ const t = getTranslations(lang);
                                             <strong>${destLabel}</strong>
                                             <small>${fromLabel} ${originLabel}</small>
                                         </div>
+                                    </div>
+                                    <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            // Favorite planner journeys (origin -> destination searches)
+            // Trayectos favoritos del planificador (búsquedas origen -> destino)
+            if (favPlannerRoutes.length > 0) {
+                html += `
+                    <div class="summary-list mt-1">
+                        ${favPlannerRoutes.map(r => {
+                            const originName = r.origin?.nombre || (lang === 'en' ? 'Origin' : 'Origen');
+                            const destName = r.destination?.nombre || (lang === 'en' ? 'Destination' : 'Destino');
+
+                            // Same URL the /favorites page builds, so the
+                            // planner reloads the saved query.
+                            // Misma URL que arma la página /favorites, para que
+                            // el planificador recargue la consulta guardada.
+                            const params = new URLSearchParams();
+                            params.set('originType', r.origin.type);
+                            if (r.origin.type === 'stop') {
+                                params.set('originId', r.origin.id);
+                            } else {
+                                params.set('originName', r.origin.nombre);
+                                params.set('originLat', r.origin.posy);
+                                params.set('originLon', r.origin.posx);
+                            }
+                            params.set('destType', r.destination.type);
+                            if (r.destination.type === 'stop') {
+                                params.set('destId', r.destination.id);
+                            } else {
+                                params.set('destName', r.destination.nombre);
+                                params.set('destLat', r.destination.posy);
+                                params.set('destLon', r.destination.posx);
+                            }
+                            if (r.plannerMode) params.set('plannerMode', r.plannerMode);
+                            if (r.targetTime) params.set('targetTime', r.targetTime);
+
+                            return `
+                                <div class="card fav-item planner-fav" role="link" tabindex="0" data-href="/planner?${params.toString()}">
+                                    <div class="fav-info">
+                                        <strong>${originName} &rarr; ${destName}</strong>
+                                        <small style="color: var(--text-muted, #64748b); font-size: 0.75rem;">
+                                            ${lang === 'en' ? 'Journey' : 'Trayecto'}${r.plannerMode === 'arrive' && r.targetTime ? ` • 🕒 ${lang === 'en' ? 'Arrive at' : 'Llegar a las'} ${r.targetTime}` : ''}
+                                        </small>
                                     </div>
                                     <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
                                 </div>
