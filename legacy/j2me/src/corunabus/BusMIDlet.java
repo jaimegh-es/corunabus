@@ -27,6 +27,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private static final String SETTINGS_KEY = "settings";
     private static final String CATALOG_KEY = "catalog";
     private static final String FAVS_KEY = "favs";
+    private static final String PLANS_KEY = "plans";
 
     private Display display;
     private Catalog catalog = new Catalog();
@@ -49,6 +50,11 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private int planOrigin = 0;
     private int pendingOrigin = 0;
     private int pendingDest = 0;
+    private String planTime = "";
+    private int shownOrigin = 0;
+    private int shownDest = 0;
+    private String shownLabel = "";
+    private boolean planScreen = false;
     private TextBox timeBox;
 
     private final Command back = new Command("Atrás", Command.BACK, 2);
@@ -297,6 +303,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         screen = new Form(title);
         stopBody = new StringItem("", body.toString());
         screen.append(stopBody);
+        planScreen = false;
         screen.addCommand(refresh);
         screen.addCommand(save);
         screen.addCommand(route);
@@ -398,10 +405,16 @@ public class BusMIDlet extends MIDlet implements CommandListener {
 
     private void openFavorites() {
         Vector entries = favoriteEntries();
+        Vector plans = planEntries();
         favoritesList = new List("Favoritos", List.IMPLICIT);
         for (int i = 0; i < entries.size(); i++) {
             String[] entry = (String[]) entries.elementAt(i);
             favoritesList.append(entry[1], null);
+        }
+        for (int i = 0; i < plans.size(); i++) {
+            String[] plan = (String[]) plans.elementAt(i);
+            String suffix = plan[2].length() > 0 ? " (" + plan[2] + ")" : "";
+            favoritesList.append("Ruta: " + planTitle(plan) + suffix, null);
         }
         favoritesList.addCommand(ok);
         favoritesList.addCommand(remove);
@@ -409,6 +422,64 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         favoritesList.setSelectCommand(ok);
         favoritesList.setCommandListener(this);
         display.setCurrent(favoritesList);
+    }
+
+    /** Rutas guardadas: String[] {origen, destino, hora, etiqueta}. */
+    private Vector planEntries() {
+        Vector out = new Vector();
+        String raw = Store.read(PLANS_KEY);
+        String[] lines = splitLines(raw == null ? "" : raw);
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].length() == 0) continue;
+            String[] f = Catalog.split(lines[i]);
+            if (f.length < 4) continue;
+            if (Catalog.parseInt(f[0], 0) > 0 && Catalog.parseInt(f[1], 0) > 0) out.addElement(f);
+        }
+        return out;
+    }
+
+    private String planTitle(String[] entry) {
+        String label = entry.length > 3 ? entry[3] : "";
+        if (label.length() > 0) return label;
+        return nameOf(entry[0]) + " -> " + nameOf(entry[1]);
+    }
+
+    private void savePlanFavorite() {
+        if (shownOrigin <= 0 || shownDest <= 0) return;
+        String label = shownLabel.length() > 0
+                ? shownLabel
+                : nameOf(String.valueOf(shownOrigin)) + " -> " + nameOf(String.valueOf(shownDest));
+        Vector entries = planEntries();
+        for (int i = 0; i < entries.size(); i++) {
+            String[] entry = (String[]) entries.elementAt(i);
+            if (Catalog.parseInt(entry[0], 0) == shownOrigin
+                    && Catalog.parseInt(entry[1], 0) == shownDest
+                    && entry[2].equals(planTime)) {
+                showError("Esa ruta ya está en favoritos.");
+                return;
+            }
+        }
+        String raw = Store.read(PLANS_KEY);
+        Store.write(PLANS_KEY, (raw == null ? "" : raw) + shownOrigin + "|" + shownDest + "|"
+                + planTime + "|" + clean(label) + "\n");
+        Alert alert = new Alert("Favoritos");
+        alert.setString(clean(label) + " guardada.");
+        alert.setTimeout(2500);
+        display.setCurrent(alert, screen);
+    }
+
+    private void removePlanFavorite(int index) {
+        Vector entries = planEntries();
+        if (index < 0 || index >= entries.size()) return;
+        StringBuffer out = new StringBuffer();
+        for (int i = 0; i < entries.size(); i++) {
+            if (i == index) continue;
+            String[] entry = (String[]) entries.elementAt(i);
+            out.append(entry[0]).append('|').append(entry[1]).append('|')
+                    .append(entry[2]).append('|').append(entry[3]).append('\n');
+        }
+        Store.write(PLANS_KEY, out.toString());
+        openFavorites();
     }
 
     private void removeFavorite(int index) {
@@ -561,6 +632,10 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     }
 
     private void loadPlan(final int origin, final int destination, final String time) {
+        shownOrigin = origin;
+        shownDest = destination;
+        planTime = time == null ? "" : time;
+        shownLabel = "";
         showBusy("Calculando ruta...");
         new Thread(new Runnable() {
             public void run() {
@@ -629,9 +704,12 @@ public class BusMIDlet extends MIDlet implements CommandListener {
 
         if (!any) body.append("No hay ruta directa ni con un transbordo.");
 
+        shownLabel = originName.length() > 0 ? originName + " -> " + destName : "Ruta";
         screen = new Form(originName.length() > 0 ? originName + " -> " + destName : "Ruta");
+        planScreen = true;
         planBody = new StringItem("", body.toString());
         screen.append(planBody);
+        screen.addCommand(save);
         screen.addCommand(back);
         screen.setCommandListener(this);
         display.setCurrent(screen);
@@ -746,6 +824,11 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             return;
         }
 
+        if (d == screen && c == save && planScreen) {
+            savePlanFavorite();
+            return;
+        }
+
         if (d == searchBox) {
             if (c == back) {
                 planMode = 0;
@@ -773,13 +856,18 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 return;
             }
             Vector entries = favoriteEntries();
+            Vector plans = planEntries();
             int index = favoritesList.getSelectedIndex();
             if (c == remove) {
-                removeFavorite(index);
+                if (index < entries.size()) removeFavorite(index);
+                else removePlanFavorite(index - entries.size());
                 return;
             }
             if (index >= 0 && index < entries.size()) {
                 selectStop(Catalog.parseInt(((String[]) entries.elementAt(index))[0], 0));
+            } else if (index >= entries.size()) {
+                String[] plan = (String[]) plans.elementAt(index - entries.size());
+                loadPlan(Catalog.parseInt(plan[0], 0), Catalog.parseInt(plan[1], 0), plan[2]);
             }
             return;
         }
