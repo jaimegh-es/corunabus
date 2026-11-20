@@ -60,17 +60,53 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private final Command ok = new Command("OK", Command.OK, 1);
 
     protected void startApp() {
-        display = Display.getDisplay(this);
-        baseUrl = Store.read(SETTINGS_KEY);
-        if (baseUrl == null || baseUrl.length() == 0) baseUrl = DEFAULT_URL;
+        try {
+            display = Display.getDisplay(this);
+            baseUrl = Store.read(SETTINGS_KEY);
+            if (baseUrl == null || baseUrl.length() == 0) baseUrl = DEFAULT_URL;
 
-        buildMenu();
-        // La interfaz aparece al instante; los datos se cargan detrás.
-        display.setCurrent(menu);
+            buildMenu();
+            // La interfaz aparece al instante; los datos se cargan detrás.
+            display.setCurrent(menu);
 
-        String cached = Store.read(CATALOG_KEY);
-        if (cached != null) catalog.parse(cached);
-        if (!catalog.loaded) downloadCatalog(false);
+            String cached = Store.read(CATALOG_KEY);
+            if (cached != null) catalog.parse(cached);
+            if (catalog.loaded) setMenuTitle("Coruña Bus");
+            else downloadCatalog(false);
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    /** Cambios de pantalla desde un hilo de fondo: pasan por el hilo de UI. */
+    private void ui(Runnable action) {
+        try {
+            display.callSerially(action);
+        } catch (Throwable t) {
+            try {
+                action.run();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void setMenuTitle(String title) {
+        try {
+            menu.setTitle(title);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Último recurso: evita el "excepción imprevista" del sistema. */
+    private void crashed(Throwable t) {
+        try {
+            Alert alert = new Alert("Error");
+            alert.setString("Fallo interno: " + t.toString());
+            alert.setType(AlertType.ERROR);
+            alert.setTimeout(Alert.FOREVER);
+            display.setCurrent(alert, menu);
+        } catch (Throwable ignored) {
+        }
     }
 
     protected void pauseApp() {
@@ -117,50 +153,67 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private void downloadCatalog(final boolean manual) {
         final boolean refresh = manual;
         if (manual) showBusy("Actualizando datos...");
+        else setMenuTitle("Coruña Bus - cargando datos...");
+        setLoading(true);
         new Thread(new Runnable() {
             public void run() {
                 String text = null;
                 String detail = "";
                 String path = "/j2me/catalog" + (refresh ? "?refresh=1" : "");
-                // La primera conexión tras arrancar puede fallar mientras el
-                // teléfono negocia el punto de acceso: se reintenta una vez.
-                for (int attempt = 0; attempt < 2 && text == null; attempt++) {
-                    try {
-                        text = Net.getPath(baseUrl, path);
-                    } catch (Throwable t) {
-                        detail = t.toString();
-                        if (attempt == 0) {
-                            try {
-                                Thread.sleep(1500);
-                            } catch (InterruptedException ignored) {
+                try {
+                    // La primera conexión tras arrancar puede fallar mientras el
+                    // teléfono negocia el punto de acceso: se reintenta una vez.
+                    for (int attempt = 0; attempt < 2 && text == null; attempt++) {
+                        try {
+                            text = Net.getPath(baseUrl, path);
+                        } catch (Throwable t) {
+                            detail = t.toString();
+                            if (attempt == 0) {
+                                try {
+                                    Thread.sleep(1500);
+                                } catch (InterruptedException ignored) {
+                                }
                             }
                         }
                     }
-                }
-                if (text != null && catalog.parse(text)) {
-                    Store.write(CATALOG_KEY, text);
-                    System.out.println("catálogo: " + catalog.version);
-                } else if (text != null && detail.length() == 0) {
-                    detail = "respuesta no válida (" + text.length() + " bytes)";
-                }
-                final String failure = detail;
-                final boolean okDownload = text != null && catalog.loaded;
-                display.setCurrent(menu);
-                if (okDownload) {
-                    if (manual) {
-                        Alert alert = new Alert("Datos");
-                        alert.setString(catalog.stops.size() + " paradas y "
-                                + catalog.lines.size() + " líneas actualizadas.");
-                        alert.setTimeout(3000);
-                        display.setCurrent(alert, menu);
+                    final boolean parsed = text != null && catalog.parse(text);
+                    if (parsed) Store.write(CATALOG_KEY, text);
+                    if (text != null && !parsed && detail.length() == 0) {
+                        detail = "respuesta no válida (" + text.length() + " bytes)";
                     }
-                } else if (manual || !catalog.loaded) {
-                    Alert alert = new Alert("Sin conexión");
-                    alert.setString("No se pudo descargar la lista de paradas.\n" + baseUrl
-                            + "\n" + failure);
-                    alert.setType(AlertType.ERROR);
-                    alert.setTimeout(6000);
-                    display.setCurrent(alert, menu);
+                    final String failure = detail;
+                    ui(new Runnable() {
+                        public void run() {
+                            setMenuTitle("Coruña Bus");
+                            setLoading(false);
+                            display.setCurrent(menu);
+                            if (parsed) {
+                                if (manual) {
+                                    Alert alert = new Alert("Datos");
+                                    alert.setString(catalog.stops.size() + " paradas y "
+                                            + catalog.lines.size() + " líneas actualizadas.");
+                                    alert.setTimeout(3000);
+                                    display.setCurrent(alert, menu);
+                                }
+                            } else if (manual || !catalog.loaded) {
+                                Alert alert = new Alert("Sin conexión");
+                                alert.setString("No se pudo descargar la lista de paradas.\n" + baseUrl
+                                        + "\n" + failure);
+                                alert.setType(AlertType.ERROR);
+                                alert.setTimeout(Alert.FOREVER);
+                                display.setCurrent(alert, menu);
+                            }
+                        }
+                    });
+                } catch (Throwable t) {
+                    final String message = t.toString();
+                    ui(new Runnable() {
+                        public void run() {
+                            setMenuTitle("Coruña Bus");
+                            setLoading(false);
+                            showError("Fallo cargando datos: " + message);
+                        }
+                    });
                 }
             }
         }).start();
@@ -177,9 +230,14 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 try {
                     text = Net.getPath(baseUrl, "/j2me/stop?id=" + stopId);
                 } catch (Throwable t) {
-                    text = "ERR red";
+                    text = "ERR " + t.toString();
                 }
-                renderStop(text);
+                final String body = text;
+                ui(new Runnable() {
+                    public void run() {
+                        renderStop(body);
+                    }
+                });
             }
         }).start();
     }
@@ -210,6 +268,9 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 any = true;
             } else if (line.startsWith("T ")) {
                 updated = line.substring(2);
+            } else if (line.startsWith("ERR ")) {
+                body.append(line.substring(4)).append('\n');
+                any = true;
             }
         }
 
@@ -355,16 +416,25 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         showBusy("Buscando GPS...");
         new Thread(new Runnable() {
             public void run() {
-                int[] position = Gps.locate();
-                if (position == null) {
-                    display.setCurrent(menu);
-                    Alert alert = new Alert("GPS");
-                    alert.setString("No hay posición. Usa \"Buscar parada\" o sal al exterior y reintenta.");
-                    alert.setTimeout(5000);
-                    display.setCurrent(alert, menu);
-                    return;
+                int[] position;
+                try {
+                    position = Gps.locate();
+                } catch (Throwable t) {
+                    position = null;
                 }
-                showNearbyList(position[0], position[1]);
+                final int[] found = position;
+                ui(new Runnable() {
+                    public void run() {
+                        if (found == null) {
+                            Alert alert = new Alert("GPS");
+                            alert.setString("No hay posición. Usa \"Buscar parada\" o sal al exterior y reintenta.");
+                            alert.setTimeout(5000);
+                            display.setCurrent(alert, menu);
+                            return;
+                        }
+                        showNearbyList(found[0], found[1]);
+                    }
+                });
             }
         }).start();
     }
@@ -412,6 +482,21 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     }
 
     private int[] nearbyIds = new int[0];
+    private boolean menuLoading = false;
+
+    /** Aviso visible en el menú mientras llega el catálogo. */
+    private void setLoading(boolean loading) {
+        try {
+            if (loading && !menuLoading) {
+                menu.append("Cargando paradas...", null);
+                menuLoading = true;
+            } else if (!loading && menuLoading) {
+                menu.delete(menu.size() - 1);
+                menuLoading = false;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
 
     // --------------------------------------------------------- planificar
 
@@ -482,9 +567,14 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 try {
                     text = Net.getPath(baseUrl, "/j2me/plan?o=" + origin + "&d=" + destination + suffix);
                 } catch (Throwable t) {
-                    text = "ERR red";
+                    text = "ERR " + t.toString();
                 }
-                renderPlan(text);
+                final String body = text;
+                ui(new Runnable() {
+                    public void run() {
+                        renderPlan(body);
+                    }
+                });
             }
         }).start();
     }
@@ -530,6 +620,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 }
             } else if (line.startsWith("ERR")) {
                 body.append("No se pudo calcular la ruta.\n");
+                if (line.length() > 4) body.append(line.substring(4)).append('\n');
                 any = true;
             }
         }
@@ -603,6 +694,14 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     // ------------------------------------------------------------- eventos
 
     public void commandAction(Command c, Displayable d) {
+        try {
+            handleCommand(c, d);
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    private void handleCommand(Command c, Displayable d) {
         if (d == timeBox) {
             if (c == back) {
                 showMenu();
@@ -626,6 +725,10 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 return;
             }
             int index = menu.getSelectedIndex();
+            if (menuLoading && index == menu.size() - 1) {
+                showError("Cargando la lista de paradas. Espera unos segundos.");
+                return;
+            }
             if (index <= 3 && !catalog.loaded) {
                 showError("Descargando la lista de paradas. Espera unos segundos.");
                 return;

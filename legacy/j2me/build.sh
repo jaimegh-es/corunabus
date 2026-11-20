@@ -97,8 +97,8 @@ MIDlet-1: Coruna Bus, /icon.png, corunabus.BusMIDlet
 MIDlet-Name: Coruna Bus
 MIDlet-Vendor: Coruna Bus
 MIDlet-Version: $VERSION
-MIDlet-Permissions: javax.microedition.io.Connector.http,javax.microedition.io.Connector.https
-MIDlet-Permissions-Opt: javax.microedition.location.Location
+MIDlet-Permissions: javax.microedition.io.Connector.http
+MIDlet-Permissions-Opt: javax.microedition.io.Connector.https,javax.microedition.location.Location
 MicroEdition-Configuration: CLDC-1.1
 MicroEdition-Profile: MIDP-2.0
 EOF
@@ -112,8 +112,8 @@ MIDlet-1: Coruna Bus, /icon.png, corunabus.BusMIDlet
 MIDlet-Name: Coruna Bus
 MIDlet-Vendor: Coruna Bus
 MIDlet-Version: $VERSION
-MIDlet-Permissions: javax.microedition.io.Connector.http,javax.microedition.io.Connector.https
-MIDlet-Permissions-Opt: javax.microedition.location.Location
+MIDlet-Permissions: javax.microedition.io.Connector.http
+MIDlet-Permissions-Opt: javax.microedition.io.Connector.https,javax.microedition.location.Location
 MIDlet-Jar-URL: corunabus.jar
 MIDlet-Jar-Size: $JAR_SIZE
 MicroEdition-Configuration: CLDC-1.1
