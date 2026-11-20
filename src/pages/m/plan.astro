@@ -1,7 +1,9 @@
 ---
 import Legacy from '../../layouts/Legacy.astro';
 import { getCatalog, stopName } from '../../services/catalog';
+import { getArrivals } from '../../services/arrivals';
 import { planRoute } from '../../services/planner';
+import { parseClock, timeOptions } from '../../services/schedule';
 import { searchStops } from '../../services/stopSearch';
 
 const params = Astro.url.searchParams;
@@ -23,6 +25,37 @@ const destChoices = pick === 'd' && destQuery ? searchStops(catalog, destQuery, 
 
 const planned =
   originValid && destValid && originId !== destId ? planRoute(catalog, originId, destId) : null;
+
+// Minutos reales del próximo bus de cada línea en la parada de origen. Si el
+// upstream falla, las horas se marcan como estimación.
+const liveOrigin = new Map<number, number[]>();
+if (planned) {
+  try {
+    const arrivals = await getArrivals(catalog, originId);
+    for (const line of arrivals.lines) liveOrigin.set(line.lineId, line.minutes);
+  } catch {
+    // sin datos en vivo: se calcula solo con la duración estimada
+  }
+}
+
+const now = new Date();
+const arriveByText = params.get('llegar') ?? '';
+const arriveBy = parseClock(arriveByText, now);
+const timings = planned ? timeOptions(planned.options, liveOrigin, now, arriveBy) : [];
+const optionRows = planned
+  ? planned.options.map((option, index) => {
+      const timing = timings[index]!;
+      return {
+        option,
+        timing,
+        waitText:
+          timing.waitMinutes !== null
+            ? `en ${timing.waitMinutes} min · a las ${timing.departAt}`
+            : 'sin datos en vivo · ahora',
+        arriveNote: timing.late ? `no llega antes de las ${arriveByText}` : 'estimada',
+      };
+    })
+  : [];
 
 function planLink(overrides: Record<string, string>): string {
   const query = new URLSearchParams();
@@ -128,89 +161,114 @@ function chooseDest(stopId: number): string {
 
   {
     planned && (
-      <>
+      <span>
         <h2>
           {planned.origin.name} → {planned.destination.name}
         </h2>
-        {planned.options.length === 0 ? (
+
+        {planned.options.length === 0 && (
           <p class="note">No hay ruta directa ni con un transbordo.</p>
-        ) : (
-          planned.options.map((option, index) => (
-            <div class="opt">
-              <div class="line">
-                <span class="badge">{option.legs[0].line}</span>
-                {option.type === 'transfer' && (
-                  <>
-                    <span class="muted">→</span>{' '}
-                    <span class="badge">{option.legs[1].line}</span>
-                  </>
-                )}
-                {' '}
-                <span class="kind">
-                  {option.type === 'direct' ? 'Directo' : '1 transbordo'}
-                </span>
-                <span class="total">{option.totalMinutes} min</span>
-              </div>
-
-              {option.type === 'direct' ? (
-                <table class="legs">
-                  <tr>
-                    <td class="step">Sube</td>
-                    <td>{stopName(catalog, option.legs[0].fromStopId)}</td>
-                  </tr>
-                  <tr>
-                    <td class="step">Baja</td>
-                    <td>{stopName(catalog, option.legs[0].toStopId)}</td>
-                  </tr>
-                  <tr>
-                    <td class="step">Trayecto</td>
-                    <td>{option.legs[0].stops} paradas · ~{option.legs[0].minutes} min</td>
-                  </tr>
-                </table>
-              ) : (
-                <table class="legs">
-                  <tr>
-                    <td class="step">Sube</td>
-                    <td>
-                      {stopName(catalog, option.legs[0].fromStopId)}{' '}
-                      <span class="muted">línea {option.legs[0].line}, {option.legs[0].stops} paradas</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="step">Cambia</td>
-                    <td>
-                      {option.legs[0].toStopId === option.legs[1].fromStopId ? (
-                        <>{stopName(catalog, option.legs[0].toStopId)}</>
-                      ) : (
-                        <>
-                          de {stopName(catalog, option.legs[0].toStopId)} a{' '}
-                          {stopName(catalog, option.legs[1].fromStopId)}{' '}
-                          <span class="muted">({option.legs[1].walkMeters} m andando)</span>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="step">Baja</td>
-                    <td>
-                      {stopName(catalog, option.legs[1].toStopId)}{' '}
-                      <span class="muted">línea {option.legs[1].line}, {option.legs[1].stops} paradas</span>
-                    </td>
-                  </tr>
-                </table>
-              )}
-
-              {option.walkMeters > 0 && (
-                <div class="muted">Incluye {option.walkMeters} m andando.</div>
-              )}
-              <div class="muted">Opción {index + 1}</div>
-            </div>
-          ))
         )}
+
+        {optionRows.map((row, index) => (
+          <div class="opt">
+            <div class="opt-head">
+              <span class="opt-n">Opción {index + 1}</span>
+              <span class="total">~{row.option.totalMinutes} min</span>
+            </div>
+            <div class="line">
+              <span class="badge">{row.option.legs[0].line}</span>
+              {row.option.type === 'transfer' && (
+                <span>
+                  <span class="muted">→</span>{' '}
+                  <span class="badge">{row.option.legs[1].line}</span>
+                </span>
+              )}{' '}
+              <span class="kind">
+                {row.option.type === 'direct' ? 'Directo' : '1 transbordo'}
+              </span>
+            </div>
+
+            <table class="legs">
+              <tr>
+                <td class="step">Sube</td>
+                <td>
+                  {stopName(catalog, row.option.legs[0].fromStopId)}{' '}
+                  <span class="muted">línea {row.option.legs[0].line}</span>
+                </td>
+              </tr>
+              {row.option.type === 'transfer' && (
+                <tr>
+                  <td class="step">Cambia</td>
+                  <td>
+                    {row.option.legs[0].toStopId === row.option.legs[1].fromStopId ? (
+                      <span>{stopName(catalog, row.option.legs[0].toStopId)}</span>
+                    ) : (
+                      <span>
+                        de {stopName(catalog, row.option.legs[0].toStopId)} a{' '}
+                        {stopName(catalog, row.option.legs[1].fromStopId)}{' '}
+                        <span class="muted">({row.option.legs[1].walkMeters} m andando)</span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )}
+              <tr>
+                <td class="step">Baja</td>
+                <td>
+                  {stopName(catalog, row.option.legs[row.option.legs.length - 1].toStopId)}{' '}
+                  <span class="muted">
+                    línea {row.option.legs[row.option.legs.length - 1].line},{' '}
+                    {row.option.legs[row.option.legs.length - 1].stops} paradas
+                  </span>
+                </td>
+              </tr>
+            </table>
+
+            <table class="times">
+              <tr>
+                <td class="step">Bus</td>
+                <td>{row.waitText}</td>
+              </tr>
+              <tr>
+                <td class="step">Llegada</td>
+                <td>
+                  <b>{row.timing.arriveAt}</b>{' '}
+                  <span class={row.timing.late ? 'late' : 'muted'}>{row.arriveNote}</span>
+                </td>
+              </tr>
+            </table>
+
+            {row.option.walkMeters > 0 && (
+              <div class="muted">Incluye {row.option.walkMeters} m andando.</div>
+            )}
+          </div>
+        ))}
+
         <p class="muted">
           <a href={`/m/stop/${planned.origin.id}`}>Ver parada de origen</a>
         </p>
-      </>
+      </span>
+    )
+  }
+
+  {
+    originValid && destValid && originId !== destId && (
+      <form action="/m/plan" method="get" class="timeform">
+        <input type="hidden" name="o" value={originId} />
+        <input type="hidden" name="d" value={destId} />
+        <p>
+          <b>Llegar antes de las</b>{' '}
+          <input type="text" name="llegar" value={arriveByText} size="6" placeholder="HH:MM" />{' '}
+          <button type="submit">Calcular</button>
+        </p>
+        {arriveBy && (
+          <p class="muted">
+            Buscando el último bus que llega antes de las {arriveByText}.{' '}
+            <a href={planLink({})}>Salir ahora</a>
+          </p>
+        )}
+      </form>
     )
   }
 

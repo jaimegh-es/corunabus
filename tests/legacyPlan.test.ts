@@ -89,16 +89,20 @@ describe('text wire format', () => {
     expect(text.trimEnd().split('\r\n').at(-1)).toBe('END');
   });
 
-  it('keeps a transfer record to 13 fields', () => {
+  it('keeps a transfer record to 16 fields (13 + espera, llegada y tarde)', () => {
     const planned = planRoute(catalog, 523, 68)!;
     const transfer = planned.options.find((option) => option.type === 'transfer');
     expect(transfer).toBeTruthy();
 
-    const record = planText(catalog, 523, 68, [transfer!])
+    const record = planText(catalog, 523, 68, [transfer!], [
+      { waitMinutes: 7, departAt: '14:20', arriveAt: '14:45', late: false },
+    ])
       .split('\r\n')
       .find((line) => line.startsWith('R '))!;
 
-    expect(record.split('|')).toHaveLength(13);
+    const fields = record.split('|');
+    expect(fields).toHaveLength(16);
+    expect(fields.slice(-3)).toEqual(['7', '14:45', '0']);
   });
 
   it('serialises nearby stops in metres', () => {

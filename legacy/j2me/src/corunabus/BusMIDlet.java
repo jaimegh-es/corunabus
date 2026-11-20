@@ -47,6 +47,9 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     // 0 = navegando, 1 = eligiendo origen, 2 = eligiendo destino
     private int planMode = 0;
     private int planOrigin = 0;
+    private int pendingOrigin = 0;
+    private int pendingDest = 0;
+    private TextBox timeBox;
 
     private final Command back = new Command("Atrás", Command.BACK, 2);
     private final Command exit = new Command("Salir", Command.EXIT, 3);
@@ -62,13 +65,12 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         if (baseUrl == null || baseUrl.length() == 0) baseUrl = DEFAULT_URL;
 
         buildMenu();
+        // La interfaz aparece al instante; los datos se cargan detrás.
+        display.setCurrent(menu);
 
         String cached = Store.read(CATALOG_KEY);
-        if (cached != null && catalog.parse(cached)) {
-            display.setCurrent(menu);
-        } else {
-            downloadCatalog(false);
-        }
+        if (cached != null) catalog.parse(cached);
+        if (!catalog.loaded) downloadCatalog(false);
     }
 
     protected void pauseApp() {
@@ -114,7 +116,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
 
     private void downloadCatalog(final boolean manual) {
         final boolean refresh = manual;
-        showBusy(refresh ? "Actualizando datos..." : "Descargando paradas...");
+        if (manual) showBusy("Actualizando datos...");
         new Thread(new Runnable() {
             public void run() {
                 String text = null;
@@ -137,7 +139,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                         alert.setTimeout(3000);
                         display.setCurrent(alert, menu);
                     }
-                } else {
+                } else if (manual || !catalog.loaded) {
                     Alert alert = new Alert("Sin conexión");
                     alert.setString("No se pudo descargar la lista de paradas. Revisa Ajustes (dirección del servidor).");
                     alert.setType(AlertType.ERROR);
@@ -438,19 +440,31 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             }
             int destination = stopId;
             planMode = 0;
-            loadPlan(planOrigin, destination);
+            askTime(planOrigin, destination);
         } else {
             openStop(stopId);
         }
     }
 
-    private void loadPlan(final int origin, final int destination) {
+    /** Pregunta la hora límite de llegada; vacío = salir ahora. */
+    private void askTime(final int origin, final int destination) {
+        pendingOrigin = origin;
+        pendingDest = destination;
+        timeBox = new TextBox("Llegar antes de las (HH:MM)", "", 5, TextField.ANY);
+        timeBox.addCommand(ok);
+        timeBox.addCommand(back);
+        timeBox.setCommandListener(this);
+        display.setCurrent(timeBox);
+    }
+
+    private void loadPlan(final int origin, final int destination, final String time) {
         showBusy("Calculando ruta...");
         new Thread(new Runnable() {
             public void run() {
                 String text;
+                String suffix = time != null && time.length() > 0 ? "&t=" + Net.urlEncode(time) : "";
                 try {
-                    text = Net.get(baseUrl + "/j2me/plan?o=" + origin + "&d=" + destination);
+                    text = Net.get(baseUrl + "/j2me/plan?o=" + origin + "&d=" + destination + suffix);
                 } catch (Throwable t) {
                     text = "ERR red";
                 }
@@ -481,7 +495,9 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                     body.append(f[0]).append(") Línea ").append(f[2]).append(" directo\n");
                     body.append("   ").append(f[5]).append(" paradas, ~").append(f[6]).append(" min\n");
                     body.append("   Sube en ").append(nameOf(f[3])).append('\n');
-                    body.append("   Baja en ").append(nameOf(f[4])).append("\n\n");
+                    body.append("   Baja en ").append(nameOf(f[4])).append('\n');
+                    appendTiming(body, f, 8);
+                    body.append('\n');
                     any = true;
                 } else if ("T".equals(f[1]) && f.length >= 12) {
                     body.append(f[0]).append(") Línea ").append(f[2]).append(" + línea ").append(f[8]).append('\n');
@@ -491,7 +507,9 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                     int walk = Catalog.parseInt(f[7], 0);
                     if (walk > 0) body.append(" (").append(walk).append(" m andando)");
                     body.append('\n');
-                    body.append("   Baja en ").append(nameOf(f[10])).append("\n\n");
+                    body.append("   Baja en ").append(nameOf(f[10])).append('\n');
+                    appendTiming(body, f, 13);
+                    body.append('\n');
                     any = true;
                 }
             } else if (line.startsWith("ERR")) {
@@ -508,6 +526,21 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         screen.addCommand(back);
         screen.setCommandListener(this);
         display.setCurrent(screen);
+    }
+
+    /** Espera real en origen y hora estimada de llegada (campos del servidor). */
+    private void appendTiming(StringBuffer body, String[] f, int index) {
+        String wait = index < f.length ? f[index] : "";
+        String arrive = index + 1 < f.length ? f[index + 1] : "";
+        String late = index + 2 < f.length ? f[index + 2] : "";
+        if (wait.length() > 0) {
+            body.append("   Bus en ").append(wait).append(" min\n");
+        }
+        if (arrive.length() > 0) {
+            body.append("   Llega a las ").append(arrive);
+            if ("1".equals(late)) body.append(" (no llega a tiempo)");
+            body.append('\n');
+        }
     }
 
     private String nameOf(String stopId) {
@@ -554,12 +587,33 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     // ------------------------------------------------------------- eventos
 
     public void commandAction(Command c, Displayable d) {
+        if (d == timeBox) {
+            if (c == back) {
+                showMenu();
+                return;
+            }
+            String time = timeBox.getString().trim();
+            if (time.length() > 0 && !validTime(time)) {
+                Alert alert = new Alert("Hora");
+                alert.setString("Escribe HH:MM, por ejemplo 14:30. Vacío = salir ahora.");
+                alert.setTimeout(4000);
+                display.setCurrent(alert, timeBox);
+                return;
+            }
+            loadPlan(pendingOrigin, pendingDest, time);
+            return;
+        }
+
         if (d == menu) {
             if (c == exit) {
                 notifyDestroyed();
                 return;
             }
             int index = menu.getSelectedIndex();
+            if (index <= 3 && !catalog.loaded) {
+                showError("Descargando la lista de paradas. Espera unos segundos.");
+                return;
+            }
             if (index == 0) openNearby();
             else if (index == 1) {
                 planMode = 0;
@@ -657,6 +711,14 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         String[] out = new String[parts.size()];
         for (int i = 0; i < out.length; i++) out[i] = (String) parts.elementAt(i);
         return out;
+    }
+
+    private static boolean validTime(String value) {
+        int colon = value.indexOf(':');
+        if (colon < 1 || colon >= value.length() - 1 || value.length() - colon > 3) return false;
+        int hours = Catalog.parseInt(value.substring(0, colon), -1);
+        int minutes = Catalog.parseInt(value.substring(colon + 1), -1);
+        return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
     }
 
     private static String clean(String value) {

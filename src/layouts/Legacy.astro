@@ -45,14 +45,24 @@ const { title } = Astro.props;
       .dir { font-size: 12px; color: #666; }
       .card { border: 1px solid #ddd; padding: 6px 8px; margin: 0 0 8px; background: #fafafa; }
       .card .title { font-weight: bold; margin-bottom: 2px; }
-      .opt { border-left: 4px solid #b3121f; padding: 4px 0 4px 8px; margin-bottom: 8px; background: #fff7f7; }
-      .opt .line { font-weight: bold; }
+      .opt { border: 1px solid #d9a3a8; border-top: 6px solid #b3121f; padding: 0 8px 10px; margin: 0 0 30px; background: #fff; }
+      .opt + .opt { margin-top: 34px; }
+      .opt-head { background: #fbe9ea; color: #7a1017; margin: 0 -8px 10px; padding: 7px 8px; border-bottom: 1px solid #e3b9bd; }
+      .opt-head .total { float: right; color: #b3121f; font-size: 20px; font-weight: bold; }
+      .opt-n { font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+      .opt .line { font-weight: bold; font-size: 16px; margin: 2px 0 6px; }
       .opt .kind { font-size: 13px; color: #666; font-weight: normal; }
-      .opt .total { float: right; font-size: 17px; font-weight: bold; color: #b3121f; }
-      table.legs { margin: 4px 0; }
-      table.legs td { border-bottom: 1px dotted #e0c7ca; padding: 3px 2px; font-size: 14px; }
-      table.legs td.step { width: 62px; color: #b3121f; font-size: 12px; text-transform: uppercase; }
+      table.legs { margin: 4px 0 6px; }
+      table.legs td { border-bottom: 1px solid #f0dadd; padding: 4px 2px; font-size: 15px; }
+      table.legs td.step { width: 64px; color: #b3121f; font-size: 11px; text-transform: uppercase; }
+      table.times { margin: 2px 0 4px; background: #fff; border: 1px solid #e3b9bd; }
+      table.times td { border-bottom: 1px solid #f0dadd; padding: 5px 4px; font-size: 15px; }
+      table.times tr:last-child td { border-bottom: 0; }
+      table.times td.step { width: 64px; color: #b3121f; font-size: 11px; text-transform: uppercase; }
       .note { background: #fffde7; border: 1px solid #f0e68c; padding: 4px 6px; font-size: 13px; }
+      .late { color: #b3121f; font-weight: bold; font-size: 13px; }
+      .timeform { border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 4px 0; margin: 10px 0; font-size: 14px; }
+      .timeform input[type=text] { width: 58px; font-size: 16px; }
     </style>
   </head>
   <body>

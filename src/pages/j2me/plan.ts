@@ -1,9 +1,12 @@
 import type { APIRoute } from 'astro';
 import { getCatalog } from '../../services/catalog';
+import { getArrivals } from '../../services/arrivals';
 import { planRoute } from '../../services/planner';
+import { parseClock, timeOptions } from '../../services/schedule';
 import { errorResponse, planText, textResponse } from '../../services/legacyText';
 
-// GET /j2me/plan?o=523&d=180
+// GET /j2me/plan?o=523&d=180[&t=14:30]
+// t = llegar antes de esa hora (HH:MM). Sin t, salir ahora.
 // The MIDlet sends two stop ids and gets back ready-to-render options. The
 // route graph never travels to the phone.
 export const GET: APIRoute = async ({ url }) => {
@@ -20,6 +23,8 @@ export const GET: APIRoute = async ({ url }) => {
   try {
     const catalog = await getCatalog();
     const planned = planRoute(catalog, originId, destId);
+    const now = new Date();
+    const target = parseClock(url.searchParams.get('t'), now);
 
     if (!planned) return errorResponse('nostop', 'Parada de origen o destino desconocida', 404);
 
@@ -30,7 +35,19 @@ export const GET: APIRoute = async ({ url }) => {
       );
     }
 
-    return textResponse(planText(catalog, originId, destId, planned.options), { maxAge: 60 });
+    // Llegadas en vivo de la parada de origen: dan la espera real del primer bus.
+    const arrivals = new Map<number, number[]>();
+    try {
+      const live = await getArrivals(catalog, originId);
+      for (const line of live.lines) arrivals.set(line.lineId, line.minutes);
+    } catch {
+      // sin datos en vivo se responde solo con la duración estimada
+    }
+
+    const timings = timeOptions(planned.options, arrivals, now, target);
+    return textResponse(planText(catalog, originId, destId, planned.options, timings), {
+      maxAge: 30,
+    });
   } catch (error) {
     console.error('j2me plan error', error);
     return errorResponse('upstream', 'No se pudo calcular la ruta', 502);

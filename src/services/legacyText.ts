@@ -12,6 +12,7 @@ import type { ArrivalLine } from './arrivals';
 import type { LegacyCatalog, LegacyStop } from './catalog';
 import { lineLabel } from './catalog';
 import type { PlanOption } from './planner';
+import type { OptionTiming } from './schedule';
 import { stopName } from './catalog';
 
 const LINE_ENDING = '\r\n';
@@ -142,15 +143,20 @@ export function nearbyText(entries: Array<{ stop: LegacyStop; meters: number }>)
  *
  * O <id>|<nombre>
  * D <id>|<nombre>
- * R <n>|D|<linea>|<desde>|<hasta>|<paradas>|<min>|<andando_m>
- * R <n>|T|<l1>|<desde>|<bajo>|<p1>|<m1>|<andando_m>|<l2>|<sube>|<hasta>|<p2>|<m2>
+ * R <n>|D|<linea>|<desde>|<hasta>|<paradas>|<min>|<andando_m>|<espera>|<llegada>|<tarde>
+ * R <n>|T|<l1>|<desde>|<bajo>|<p1>|<m1>|<andando_m>|<l2>|<sube>|<hasta>|<p2>|<m2>|<espera>|<llegada>|<tarde>
  * END
+ *
+ * <espera> son los minutos hasta el bus en la parada de origen (vacío si no
+ * hay datos en vivo), <llegada> la hora HH:MM estimada y <tarde> 1 cuando con
+ * ese bus ya no se cumple la hora pedida.
  */
 export function planText(
   catalog: LegacyCatalog,
   originId: number,
   destId: number,
   options: PlanOption[],
+  timings: OptionTiming[] = [],
 ): string {
   const records: string[] = [
     `O ${originId}|${sanitize(stopName(catalog, originId))}`,
@@ -159,17 +165,22 @@ export function planText(
 
   options.forEach((option, index) => {
     const n = index + 1;
+    const timing = timings[index];
+    const tail = timing
+      ? `|${timing.waitMinutes ?? ''}|${timing.arriveAt}|${timing.late ? 1 : 0}`
+      : '|||';
+
     if (option.type === 'direct') {
       const leg = option.legs[0];
       records.push(
-        `R ${n}|D|${sanitize(leg.line)}|${leg.fromStopId}|${leg.toStopId}|${leg.stops}|${leg.minutes}|${option.walkMeters}`,
+        `R ${n}|D|${sanitize(leg.line)}|${leg.fromStopId}|${leg.toStopId}|${leg.stops}|${leg.minutes}|${option.walkMeters}${tail}`,
       );
       return;
     }
 
     const [first, second] = option.legs;
     records.push(
-      `R ${n}|T|${sanitize(first.line)}|${first.fromStopId}|${first.toStopId}|${first.stops}|${first.minutes}|${option.walkMeters}|${sanitize(second.line)}|${second.fromStopId}|${second.toStopId}|${second.stops}|${second.minutes}`,
+      `R ${n}|T|${sanitize(first.line)}|${first.fromStopId}|${first.toStopId}|${first.stops}|${first.minutes}|${option.walkMeters}|${sanitize(second.line)}|${second.fromStopId}|${second.toStopId}|${second.stops}|${second.minutes}${tail}`,
     );
   });
 

@@ -89,12 +89,16 @@ if ! javap -verbose -cp "$BUILD/obf" corunabus.BusMIDlet | grep -q 'major versio
   exit 1
 fi
 
+cp res/icon.png "$BUILD/obf/icon.png"
+
 cat > "$BUILD/MANIFEST.MF" <<EOF
 Manifest-Version: 1.0
-MIDlet-1: Coruna Bus, , corunabus.BusMIDlet
+MIDlet-1: Coruna Bus, /icon.png, corunabus.BusMIDlet
 MIDlet-Name: Coruna Bus
 MIDlet-Vendor: Coruna Bus
 MIDlet-Version: $VERSION
+MIDlet-Permissions: javax.microedition.io.Connector.http,javax.microedition.io.Connector.https
+MIDlet-Permissions-Opt: javax.microedition.location.Location
 MicroEdition-Configuration: CLDC-1.1
 MicroEdition-Profile: MIDP-2.0
 EOF
@@ -104,10 +108,12 @@ rm -f "$DIST/corunabus.jar" "$DIST/corunabus.jad"
 JAR_SIZE=$(wc -c < "$DIST/corunabus.jar" | tr -d ' ')
 
 cat > "$DIST/corunabus.jad" <<EOF
-MIDlet-1: Coruna Bus, , corunabus.BusMIDlet
+MIDlet-1: Coruna Bus, /icon.png, corunabus.BusMIDlet
 MIDlet-Name: Coruna Bus
 MIDlet-Vendor: Coruna Bus
 MIDlet-Version: $VERSION
+MIDlet-Permissions: javax.microedition.io.Connector.http,javax.microedition.io.Connector.https
+MIDlet-Permissions-Opt: javax.microedition.location.Location
 MIDlet-Jar-URL: corunabus.jar
 MIDlet-Jar-Size: $JAR_SIZE
 MicroEdition-Configuration: CLDC-1.1
