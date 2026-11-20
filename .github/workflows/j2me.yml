@@ -1,0 +1,58 @@
+name: J2ME (Nokia E71)
+
+# Construye el MIDlet de verdad en cada push que toque legacy/j2me y publica
+# corunabus.jar + corunabus.jad como artefacto descargable.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'legacy/j2me/**'
+      - '.github/workflows/j2me.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build MIDlet
+        run: legacy/j2me/build.sh "${{ steps.version.outputs.version }}"
+
+      - name: Show artifact summary
+        run: |
+          ls -l legacy/j2me/dist
+          unzip -l legacy/j2me/dist/corunabus.jar
+
+      - name: Upload JAR and JAD
+        uses: actions/upload-artifact@v4
+        with:
+          name: corunabus-j2me
+          path: |
+            legacy/j2me/dist/corunabus.jar
+            legacy/j2me/dist/corunabus.jad
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: j2me-v${{ steps.version.outputs.version }}-${{ github.run_number }}
+          name: Nokia E71 v${{ steps.version.outputs.version }} (${{ github.run_number }})
+          files: |
+            legacy/j2me/dist/corunabus.jar
+            legacy/j2me/dist/corunabus.jad
+          body: |
+            Copia `corunabus.jar` y `corunabus.jad` a la misma carpeta del móvil
+            y abre el `.jad` para instalar.

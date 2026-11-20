@@ -1,0 +1,29 @@
+---
+import Legacy from '../../layouts/Legacy.astro';
+import { getCatalog } from '../../services/catalog';
+import { searchStops } from '../../services/stopSearch';
+
+const query = Astro.url.searchParams.get('q') ?? '';
+const catalog = await getCatalog();
+const results = searchStops(catalog, query, 25);
+---
+
+<Legacy title={`Buscar ${query}`}>
+  <h1>Buscar parada</h1>
+
+  <form action="/m/search" method="get">
+    <input type="search" name="q" value={query} />
+    <button type="submit">Buscar</button>
+  </form>
+
+  <h2>{results.length ? `${results.length} resultados` : 'Sin resultados'}</h2>
+  <ul>
+    {
+      results.map((stop) => (
+        <li>
+          <a href={`/m/stop/${stop.id}`}>{stop.name} <span class="muted">#{stop.id}</span></a>
+        </li>
+      ))
+    }
+  </ul>
+</Legacy>

@@ -1,0 +1,34 @@
+---
+import Legacy from '../../layouts/Legacy.astro';
+import { getCatalog } from '../../services/catalog';
+
+const catalog = await getCatalog();
+---
+
+<Legacy title="Buses de A Coruña">
+  <h1>Coruña Bus</h1>
+
+  <form action="/m/search" method="get">
+    <input type="search" name="q" placeholder="Parada o número" />
+    <button type="submit">Buscar</button>
+  </form>
+
+  <h2>Líneas</h2>
+  <ul>
+    {
+      catalog.lines.map((line) => (
+        <li>
+          <a href={`/m/line/${line.id}`}>
+            <span class="badge">{line.code}</span>{' '}
+            <span class="stop-name">{line.from}</span> <span class="muted">→</span> <span class="stop-name">{line.to}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+
+  <h2>Nokia E71</h2>
+  <p><a href="/m/nokia">Descargar la app Java (corunabus.jar)</a></p>
+
+  <p class="muted">Datos: {catalog.version} · {catalog.stops.length} paradas</p>
+</Legacy>

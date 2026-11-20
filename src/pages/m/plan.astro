@@ -1,0 +1,222 @@
+---
+import Legacy from '../../layouts/Legacy.astro';
+import { getCatalog, stopName } from '../../services/catalog';
+import { planRoute } from '../../services/planner';
+import { searchStops } from '../../services/stopSearch';
+
+const params = Astro.url.searchParams;
+const catalog = await getCatalog();
+
+const originId = Number(params.get('o'));
+const destId = Number(params.get('d'));
+const originValid = Number.isInteger(originId) && Boolean(catalog.stopsById[originId]);
+const destValid = Number.isInteger(destId) && Boolean(catalog.stopsById[destId]);
+
+const originQuery = params.get('oq') ?? (originValid ? stopName(catalog, originId) : '');
+const destQuery = params.get('dq') ?? (destValid ? stopName(catalog, destId) : '');
+
+// Qué campo está buscando ahora: al enviar cada formulario se marca pick=o/d
+// y se listan las paradas que coinciden para poder tocarlas.
+const pick = params.get('pick');
+const originChoices = pick === 'o' && originQuery ? searchStops(catalog, originQuery, 10) : [];
+const destChoices = pick === 'd' && destQuery ? searchStops(catalog, destQuery, 10) : [];
+
+const planned =
+  originValid && destValid && originId !== destId ? planRoute(catalog, originId, destId) : null;
+
+function planLink(overrides: Record<string, string>): string {
+  const query = new URLSearchParams();
+  if (originValid) {
+    query.set('o', String(originId));
+    query.set('oq', stopName(catalog, originId));
+  }
+  if (destValid) {
+    query.set('d', String(destId));
+    query.set('dq', stopName(catalog, destId));
+  }
+  for (const [key, value] of Object.entries(overrides)) query.set(key, value);
+  return `/m/plan?${query.toString()}`;
+}
+
+function chooseOrigin(stopId: number): string {
+  return planLink({ o: String(stopId), oq: stopName(catalog, stopId) });
+}
+
+function chooseDest(stopId: number): string {
+  return planLink({ d: String(stopId), dq: stopName(catalog, stopId) });
+}
+---
+
+<Legacy title="Planificar">
+  <h1>Planificar</h1>
+
+  {
+    originValid ? (
+      <div class="card">
+        <div class="muted">Desde</div>
+        <div class="title">{stopName(catalog, originId)}</div>
+        <a href={planLink({ o: '', oq: '' })}>cambiar</a>
+      </div>
+    ) : (
+      <form action="/m/plan" method="get">
+        <p>
+          <input type="search" name="oq" value={originQuery} placeholder="Desde: calle o parada" />
+          <input type="hidden" name="pick" value="o" />
+          {destValid && <input type="hidden" name="d" value={destId} />}
+        </p>
+        <button type="submit">Buscar origen</button>
+      </form>
+    )
+  }
+
+  {originChoices.length > 0 && !originValid && (
+    <>
+      <h2>Elige el origen</h2>
+      <ul>
+        {originChoices.map((stop) => (
+          <li>
+            <a href={chooseOrigin(stop.id)}>
+              <span class="stop-name">{stop.name}</span> <span class="muted">#{stop.id}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      {originChoices.length === 0 && <p class="note">Ninguna parada coincide.</p>}
+    </>
+  )}
+
+  {
+    destValid ? (
+      <div class="card">
+        <div class="muted">Hasta</div>
+        <div class="title">{stopName(catalog, destId)}</div>
+        <a href={planLink({ d: '', dq: '' })}>cambiar</a>
+      </div>
+    ) : (
+      <form action="/m/plan" method="get">
+        <p>
+          <input type="search" name="dq" value={destQuery} placeholder="Hasta: calle o parada" />
+          <input type="hidden" name="pick" value="d" />
+          {originValid && <input type="hidden" name="o" value={originId} />}
+        </p>
+        <button type="submit">Buscar destino</button>
+      </form>
+    )
+  }
+
+  {destChoices.length > 0 && !destValid && (
+    <>
+      <h2>Elige el destino</h2>
+      <ul>
+        {destChoices.map((stop) => (
+          <li>
+            <a href={chooseDest(stop.id)}>
+              <span class="stop-name">{stop.name}</span> <span class="muted">#{stop.id}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </>
+  )}
+
+  {pick === 'o' && originQuery && originChoices.length === 0 && (
+    <p class="note">Ninguna parada coincide con «{originQuery}». Prueba con menos palabras.</p>
+  )}
+  {pick === 'd' && destQuery && destChoices.length === 0 && (
+    <p class="note">Ninguna parada coincide con «{destQuery}». Prueba con menos palabras.</p>
+  )}
+
+  {
+    planned && (
+      <>
+        <h2>
+          {planned.origin.name} → {planned.destination.name}
+        </h2>
+        {planned.options.length === 0 ? (
+          <p class="note">No hay ruta directa ni con un transbordo.</p>
+        ) : (
+          planned.options.map((option, index) => (
+            <div class="opt">
+              <div class="line">
+                <span class="badge">{option.legs[0].line}</span>
+                {option.type === 'transfer' && (
+                  <>
+                    <span class="muted">→</span>{' '}
+                    <span class="badge">{option.legs[1].line}</span>
+                  </>
+                )}
+                {' '}
+                <span class="kind">
+                  {option.type === 'direct' ? 'Directo' : '1 transbordo'}
+                </span>
+                <span class="total">{option.totalMinutes} min</span>
+              </div>
+
+              {option.type === 'direct' ? (
+                <table class="legs">
+                  <tr>
+                    <td class="step">Sube</td>
+                    <td>{stopName(catalog, option.legs[0].fromStopId)}</td>
+                  </tr>
+                  <tr>
+                    <td class="step">Baja</td>
+                    <td>{stopName(catalog, option.legs[0].toStopId)}</td>
+                  </tr>
+                  <tr>
+                    <td class="step">Trayecto</td>
+                    <td>{option.legs[0].stops} paradas · ~{option.legs[0].minutes} min</td>
+                  </tr>
+                </table>
+              ) : (
+                <table class="legs">
+                  <tr>
+                    <td class="step">Sube</td>
+                    <td>
+                      {stopName(catalog, option.legs[0].fromStopId)}{' '}
+                      <span class="muted">línea {option.legs[0].line}, {option.legs[0].stops} paradas</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="step">Cambia</td>
+                    <td>
+                      {option.legs[0].toStopId === option.legs[1].fromStopId ? (
+                        <>{stopName(catalog, option.legs[0].toStopId)}</>
+                      ) : (
+                        <>
+                          de {stopName(catalog, option.legs[0].toStopId)} a{' '}
+                          {stopName(catalog, option.legs[1].fromStopId)}{' '}
+                          <span class="muted">({option.legs[1].walkMeters} m andando)</span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="step">Baja</td>
+                    <td>
+                      {stopName(catalog, option.legs[1].toStopId)}{' '}
+                      <span class="muted">línea {option.legs[1].line}, {option.legs[1].stops} paradas</span>
+                    </td>
+                  </tr>
+                </table>
+              )}
+
+              {option.walkMeters > 0 && (
+                <div class="muted">Incluye {option.walkMeters} m andando.</div>
+              )}
+              <div class="muted">Opción {index + 1}</div>
+            </div>
+          ))
+        )}
+        <p class="muted">
+          <a href={`/m/stop/${planned.origin.id}`}>Ver parada de origen</a>
+        </p>
+      </>
+    )
+  }
+
+  {
+    originValid && destValid && originId === destId && (
+      <p class="note">Origen y destino son la misma parada.</p>
+    )
+  }
+</Legacy>

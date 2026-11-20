@@ -1,0 +1,30 @@
+---
+import Legacy from '../../../layouts/Legacy.astro';
+import { getCatalog, lineStopIds } from '../../../services/catalog';
+
+const lineId = Number(Astro.params.id);
+const catalog = await getCatalog();
+const line = catalog.linesById[lineId];
+
+if (!line) {
+  return new Response('Línea desconocida', { status: 404 });
+}
+
+const stops = lineStopIds(catalog, line).map((stopId) => catalog.stopsById[stopId]);
+---
+
+<Legacy title={`Línea ${line.code}`}>
+  <h1><span class="badge">{line.code}</span> {line.from} → {line.to}</h1>
+
+  <h2>Paradas ({stops.length})</h2>
+  <ol>
+    {
+      stops.map((stop, index) => (
+        <li>
+          <span class="muted">{index + 1}.</span>{' '}
+          <a href={`/m/stop/${stop.id}`}>{stop.name}</a>
+        </li>
+      ))
+    }
+  </ol>
+</Legacy>

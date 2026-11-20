@@ -1,0 +1,62 @@
+---
+// Minimal layout for the E71 / Opera Mini browsers: no JavaScript, no images,
+// one column, a handful of CSS rules. Every page here is server rendered.
+// Layout mínimo para el navegador del Nokia: sin JS, sin imágenes. Un poco de
+// color y de separación para distinguir línea, tiempo y parada de un vistazo.
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} - Coruña Bus</title>
+    <style>
+      body { font-family: sans-serif; margin: 0; padding: 6px; background: #fff; color: #111; }
+      h1 { font-size: 18px; margin: 2px 0 8px; color: #b3121f; }
+      h2 { font-size: 15px; margin: 14px 0 6px; color: #b3121f; border-bottom: 2px solid #f0c9cd; padding-bottom: 3px; }
+      a { color: #0645ad; text-decoration: none; }
+      ul, ol { list-style: none; margin: 0; padding: 0; }
+      li { padding: 6px 0; border-bottom: 1px solid #ddd; }
+      .num { font-weight: bold; }
+      .muted { color: #666; font-size: 13px; }
+      .nav { margin-bottom: 8px; font-size: 14px; padding-bottom: 4px; border-bottom: 2px solid #b3121f; background: #fff5f5; }
+      table { width: 100%; border-collapse: collapse; }
+      th { text-align: left; font-size: 12px; color: #666; padding: 2px; border-bottom: 2px solid #b3121f; }
+      td { padding: 5px 2px; border-bottom: 1px solid #ddd; vertical-align: middle; }
+      td.line { width: 40px; }
+      td.right, th.right { text-align: right; }
+      .dest { color: #444; font-size: 14px; }
+      input { width: 58%; padding: 4px; font-size: 16px; }
+      button { padding: 4px 8px; font-size: 15px; }
+      .row { display: block; padding: 6px 0; border-bottom: 1px solid #ddd; }
+      .big { font-size: 20px; font-weight: bold; }
+      /* Número de línea: cuadrado azul, siempre del mismo ancho. */
+      .badge { display: inline-block; min-width: 24px; padding: 2px 5px; margin-right: 4px; background: #b3121f; color: #fff; font-weight: bold; text-align: center; }
+      /* Tiempo de llegada: recuadro verde claro con el número grande. */
+      .mins { display: inline-block; padding: 2px 6px; margin-right: 3px; background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20; font-weight: bold; }
+      .mins.soon { background: #fff3e0; border-color: #ffb74d; color: #b34a00; }
+      .stop-name { font-size: 16px; }
+      .dir { font-size: 12px; color: #666; }
+      .card { border: 1px solid #ddd; padding: 6px 8px; margin: 0 0 8px; background: #fafafa; }
+      .card .title { font-weight: bold; margin-bottom: 2px; }
+      .opt { border-left: 4px solid #b3121f; padding: 4px 0 4px 8px; margin-bottom: 8px; background: #fff7f7; }
+      .opt .line { font-weight: bold; }
+      .opt .kind { font-size: 13px; color: #666; font-weight: normal; }
+      .opt .total { float: right; font-size: 17px; font-weight: bold; color: #b3121f; }
+      table.legs { margin: 4px 0; }
+      table.legs td { border-bottom: 1px dotted #e0c7ca; padding: 3px 2px; font-size: 14px; }
+      table.legs td.step { width: 62px; color: #b3121f; font-size: 12px; text-transform: uppercase; }
+      .note { background: #fffde7; border: 1px solid #f0e68c; padding: 4px 6px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="nav"><a href="/m/">Inicio</a> | <a href="/m/plan">Planificar</a> | <a href="/m/nokia">App Nokia</a></div>
+    <slot />
+  </body>
+</html>

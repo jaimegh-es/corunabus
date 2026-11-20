@@ -25,3 +25,8 @@ pnpm-debug.log*
 
 # wrangler cache and local runtime state
 .wrangler/
+
+# J2ME build output and downloaded toolchain
+legacy/j2me/.tools/
+legacy/j2me/build/
+legacy/j2me/dist/

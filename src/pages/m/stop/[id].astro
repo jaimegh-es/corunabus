@@ -1,0 +1,73 @@
+---
+import Legacy from '../../../layouts/Legacy.astro';
+import { getCatalog, stopName } from '../../../services/catalog';
+import { getArrivals } from '../../../services/arrivals';
+import { linesAtStop } from '../../../services/planner';
+
+const stopId = Number(Astro.params.id);
+const catalog = await getCatalog();
+const stop = catalog.stopsById[stopId];
+
+if (!stop) {
+  return new Response('Parada desconocida', { status: 404 });
+}
+
+let live: Map<number, number[]> = new Map();
+try {
+  const arrivals = await getArrivals(catalog, stopId);
+  live = new Map(arrivals.lines.map((line) => [line.lineId, line.minutes]));
+} catch {
+  // No live data: the page still lists the lines that serve the stop.
+}
+
+const serving = linesAtStop(catalog, stopId).map((line) => ({
+  line,
+  minutes: live.get(line.id) ?? [],
+}));
+
+const extra = [...live.keys()]
+  .filter((lineId) => !serving.some((entry) => entry.line.id === lineId))
+  .map((lineId) => ({ line: catalog.linesById[lineId], minutes: live.get(lineId) ?? [] }))
+  .filter((entry) => Boolean(entry.line));
+
+const rows = [...serving, ...extra];
+Astro.response.headers.set('Cache-Control', 'public, max-age=10');
+---
+
+<Legacy title={stopName(catalog, stopId)}>
+  <h1>{stop.name}</h1>
+  <p class="muted">Parada #{stop.id} · {stop.lat.toFixed(5)}, {stop.lng.toFixed(5)}</p>
+
+  <h2>Próximos buses</h2>
+  <table class="buses">
+    <tr>
+      <th>Línea</th>
+      <th>Destino</th>
+      <th class="right">Min</th>
+    </tr>
+    {
+      rows.map((entry) => (
+        <tr>
+          <td class="line">
+            <a href={`/m/line/${entry.line!.id}`}>
+              <span class="badge">{entry.line!.code}</span>
+            </a>
+          </td>
+          <td class="dest">{entry.line!.to}</td>
+          <td class="right">
+            {entry.minutes.length ? (
+              entry.minutes.map((minutes) => (
+                <span class={`mins${minutes <= 5 ? ' soon' : ''}`}>{minutes}{' '}</span>
+              ))
+            ) : (
+              <span class="muted">—</span>
+            )}
+          </td>
+        </tr>
+      ))
+    }
+  </table>
+
+  <p><a href={`/m/plan?o=${stop.id}`}>Planificar desde aquí</a></p>
+  <p><a href={`/m/stop/${stop.id}`}>Actualizar</a></p>
+</Legacy>

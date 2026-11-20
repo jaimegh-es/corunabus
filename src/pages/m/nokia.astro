@@ -1,0 +1,36 @@
+---
+import Legacy from '../../layouts/Legacy.astro';
+
+const releases = 'https://github.com/jaimegh-es/buscoruna/releases?q=j2me';
+const actions = 'https://github.com/jaimegh-es/buscoruna/actions/workflows/j2me.yml';
+---
+
+<Legacy title="App para Nokia E71">
+  <h1>App para Nokia y telefonos Symbian</h1>
+
+  <div class="card">
+    <div class="title">corunabus.jar + corunabus.jad</div>
+    <p class="muted">
+      MIDlet MIDP 2.0 / CLDC 1.1 para mi E71 y cualquier S60 3rd edition. Sin firmar: el teléfono
+      pedirá confirmación al instalar.
+    </p>
+    <p><a class="big" href={releases}>Descargar de las releases</a></p>
+    <p class="muted"><a href={actions}>Último build en GitHub Actions</a></p>
+  </div>
+
+  <h2>Instalar</h2>
+  <ol>
+    <li>Descarga <b>corunabus.jar</b> y <b>corunabus.jad</b>.</li>
+    <li>Copia los dos a la misma carpeta de la tarjeta de memoria.</li>
+    <li>Abre el <b>.jad</b> (o el .jar) desde el Administrador de archivos y acepta la instalación.</li>
+  </ol>
+
+  <h2>Qué hace</h2>
+  <ul>
+    <li>Llegadas en tiempo real por parada.</li>
+    <li>Paradas cercanas con el GPS del teléfono.</li>
+    <li>Favoritos guardados en el propio móvil.</li>
+    <li>Planificador de rutas calculado en el servidor.</li>
+    <li>La lista de paradas se descarga una vez y solo se recarga si tú lo pides.</li>
+  </ul>
+</Legacy>
