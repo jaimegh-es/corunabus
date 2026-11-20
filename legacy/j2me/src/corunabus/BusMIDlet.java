@@ -120,15 +120,30 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         new Thread(new Runnable() {
             public void run() {
                 String text = null;
-                try {
-                    text = Net.getPath(baseUrl, "/j2me/catalog" + (refresh ? "?refresh=1" : ""));
-                } catch (Throwable t) {
-                    text = null;
+                String detail = "";
+                String path = "/j2me/catalog" + (refresh ? "?refresh=1" : "");
+                // La primera conexión tras arrancar puede fallar mientras el
+                // teléfono negocia el punto de acceso: se reintenta una vez.
+                for (int attempt = 0; attempt < 2 && text == null; attempt++) {
+                    try {
+                        text = Net.getPath(baseUrl, path);
+                    } catch (Throwable t) {
+                        detail = t.toString();
+                        if (attempt == 0) {
+                            try {
+                                Thread.sleep(1500);
+                            } catch (InterruptedException ignored) {
+                            }
+                        }
+                    }
                 }
                 if (text != null && catalog.parse(text)) {
                     Store.write(CATALOG_KEY, text);
                     System.out.println("catálogo: " + catalog.version);
+                } else if (text != null && detail.length() == 0) {
+                    detail = "respuesta no válida (" + text.length() + " bytes)";
                 }
+                final String failure = detail;
                 final boolean okDownload = text != null && catalog.loaded;
                 display.setCurrent(menu);
                 if (okDownload) {
@@ -141,7 +156,8 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                     }
                 } else if (manual || !catalog.loaded) {
                     Alert alert = new Alert("Sin conexión");
-                    alert.setString("No se pudo descargar la lista de paradas. Revisa Ajustes (dirección del servidor).");
+                    alert.setString("No se pudo descargar la lista de paradas.\n" + baseUrl
+                            + "\n" + failure);
                     alert.setType(AlertType.ERROR);
                     alert.setTimeout(6000);
                     display.setCurrent(alert, menu);

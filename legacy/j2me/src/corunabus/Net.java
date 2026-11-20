@@ -24,50 +24,87 @@ public class Net {
      * sin tocar la dirección guardada.
      */
     public static String getPath(String baseUrl, String path) throws IOException {
+        String httpsError = null;
         try {
             return get(baseUrl + path);
         } catch (IOException error) {
-            if (baseUrl.startsWith("https://")) {
-                return get("http://" + baseUrl.substring(8) + path);
-            }
-            throw error;
+            httpsError = error.toString();
         }
+        if (baseUrl.startsWith("https://")) {
+            try {
+                return get("http://" + baseUrl.substring(8) + path);
+            } catch (IOException error) {
+                throw new IOException(httpsError + " / " + error.toString());
+            }
+        }
+        throw new IOException(httpsError);
     }
 
     public static String get(String url) throws IOException {
         HttpConnection conn = null;
         InputStream in = null;
         try {
-            conn = (HttpConnection) Connector.open(url, Connector.READ, true);
-            conn.setRequestMethod(HttpConnection.GET);
-            conn.setRequestProperty("User-Agent", "CorunaBusMIDlet/1.0");
-            conn.setRequestProperty("Accept", "text/plain");
-            int status = conn.getResponseCode();
-            if (status != HttpConnection.HTTP_OK) {
-                throw new IOException("HTTP " + status);
+            // Sigue las redirecciones (Cloudflare manda http -> https con 301).
+            for (int hop = 0; hop < 4; hop++) {
+                conn = (HttpConnection) Connector.open(url);
+                conn.setRequestMethod(HttpConnection.GET);
+                conn.setRequestProperty("User-Agent", "CorunaBusMIDlet/1.0");
+                conn.setRequestProperty("Accept", "text/plain");
+                int status = conn.getResponseCode();
+                if (status == HttpConnection.HTTP_MOVED_PERM
+                        || status == HttpConnection.HTTP_MOVED_TEMP
+                        || status == HttpConnection.HTTP_SEE_OTHER
+                        || status == 307) {
+                    String location = conn.getHeaderField("Location");
+                    close(conn, null);
+                    conn = null;
+                    if (location == null || location.length() == 0) {
+                        throw new IOException("HTTP " + status + " sin Location");
+                    }
+                    url = absolute(url, location);
+                    continue;
+                }
+                if (status != HttpConnection.HTTP_OK) {
+                    throw new IOException("HTTP " + status);
+                }
+                in = conn.openInputStream();
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                byte[] chunk = new byte[1024];
+                int read;
+                while ((read = in.read(chunk)) != -1) {
+                    buffer.write(chunk, 0, read);
+                }
+                return decode(buffer.toByteArray());
             }
-            in = conn.openInputStream();
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            byte[] chunk = new byte[1024];
-            int read;
-            while ((read = in.read(chunk)) != -1) {
-                buffer.write(chunk, 0, read);
-            }
-            return decode(buffer.toByteArray());
+            throw new IOException("demasiadas redirecciones");
         } finally {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException ignored) {
-                }
-            }
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (IOException ignored) {
-                }
+            close(conn, in);
+        }
+    }
+
+    private static void close(HttpConnection conn, InputStream in) {
+        if (in != null) {
+            try {
+                in.close();
+            } catch (IOException ignored) {
             }
         }
+        if (conn != null) {
+            try {
+                conn.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    /** Resuelve un Location relativo contra la URL actual. */
+    static String absolute(String url, String location) {
+        if (location.startsWith("http://") || location.startsWith("https://")) return location;
+        int scheme = url.indexOf("://");
+        int hostEnd = url.indexOf('/', scheme + 3);
+        String origin = hostEnd == -1 ? url : url.substring(0, hostEnd);
+        if (location.startsWith("/")) return origin + location;
+        return origin + "/" + location;
     }
 
     /** UTF-8 con reserva a ISO-8859-1 si aparecen caracteres de reemplazo. */
