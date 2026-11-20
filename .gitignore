@@ -30,3 +30,4 @@ pnpm-debug.log*
 legacy/j2me/.tools/
 legacy/j2me/build/
 legacy/j2me/dist/
+legacy/j2me/.emulator/
