@@ -15,6 +15,12 @@ public class Net {
 
     public static final int TIMEOUT = 20000;
 
+    /** CLDC 1.1 no tiene Character.forDigit ni Character.digit(char,int) inverso. */
+    private static final char[] HEX = {
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
+    };
+
     private Net() {
     }
 
@@ -143,8 +149,8 @@ public class Net {
                 for (int j = 0; j < bytes.length; j++) {
                     int b = bytes[j] & 0xff;
                     out.append('%');
-                    out.append(Character.toUpperCase(Character.forDigit((b >> 4) & 0xf, 16)));
-                    out.append(Character.toUpperCase(Character.forDigit(b & 0xf, 16)));
+                    out.append(HEX[(b >> 4) & 0xf]);
+                    out.append(HEX[b & 0xf]);
                 }
             }
         }

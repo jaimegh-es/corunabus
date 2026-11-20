@@ -91,7 +91,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     }
 
     /** Cambios de pantalla desde un hilo de fondo: pasan por el hilo de UI. */
-    private void ui(Runnable action) {
+    private void ui(final Runnable action) {
         final Runnable safe = new Runnable() {
             public void run() {
                 try {

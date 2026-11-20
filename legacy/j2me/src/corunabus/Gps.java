@@ -27,9 +27,10 @@ public class Gps {
             if (location == null) return null;
             QualifiedCoordinates coords = location.getQualifiedCoordinates();
             if (coords == null) return null;
+            // Math.round no existe en CLDC 1.1: floor(x + 0.5) es equivalente.
             return new int[] {
-                (int) Math.round(coords.getLatitude() * 100000),
-                (int) Math.round(coords.getLongitude() * 100000)
+                (int) Math.floor(coords.getLatitude() * 100000 + 0.5),
+                (int) Math.floor(coords.getLongitude() * 100000 + 0.5)
             };
         } catch (Throwable t) {
             return null;

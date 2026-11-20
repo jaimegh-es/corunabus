@@ -24,3 +24,14 @@ El móvil no calcula rutas: pide texto plano al worker.
   paradas. El catálogo se descarga una sola vez (~27 KB) y se reutiliza hasta
   que pulses ese botón.
 
+## Compilar
+
+`./build.sh <versión>` usa ECJ en modo `-source/-target 1.4` contra los stubs
+de **CLDC 1.1**. No lo cambies por `javac` con el JRE del sistema: generaría
+`StringBuilder`, `Math.asin`, `Math.round` o `Character.forDigit`, que el E71
+no tiene. MicroEmulator sí los tiene, así que allí el fallo no se ve.
+
+El `MIDlet-Version` lo calcula el workflow de GitHub Actions sumando el número
+de ejecución al parche de `package.json`: así cada artefacto es una versión
+distinta para el móvil. Para probar en local, pásale el número a `build.sh`.
+

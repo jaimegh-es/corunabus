@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Construye corunabus.jar + corunabus.jad para el Nokia E71.
 #
-# - javac compila contra el API de MIDP 2.0 (microemu-midp) y unos stubs de
-#   JSR-179 que NO se empaquetan: el E71 trae la implementación real.
-# - ProGuard convierte las clases a bytecode CLDC 1.1 (major 48) y las
-#   preverifica (-microedition), que es lo que espera el S60.
+# - ECJ compila en modo -source/-target 1.4 contra los stubs de CLDC 1.1
+#   (cldcapi11), el API de MIDP 2.0 (microemu-midp) y unos stubs de JSR-179 que
+#   NO se empaquetan: el E71 trae la implementación real. Compilar contra los
+#   stubs de CLDC es clave: javac/ECJ con el JRE completo dejan usar
+#   StringBuilder, Math.asin, Math.round o Character.forDigit, que NO existen
+#   en el móvil. MicroEmulator los tiene y por eso allí funcionaba.
+# - ProGuard preverifica (-microedition), que es lo que espera el S60.
 # - jar/jad se generan con el tamaño exacto del jar.
 #
 # Uso: legacy/j2me/build.sh [version]
@@ -18,6 +21,8 @@ BUILD="build"
 DIST="dist"
 
 MIDP_JAR="$TOOLS/microemu-midp-2.0.4.jar"
+CLDC_JAR="$TOOLS/cldcapi11-2.0.4.jar"
+ECJ_JAR="$TOOLS/ecj-3.33.0.jar"
 PROGUARD_JARS=(
   "$TOOLS/proguard-base-7.6.1.jar"
   "$TOOLS/proguard-core-9.1.7.jar"
@@ -36,6 +41,8 @@ download() {
 
 mkdir -p "$TOOLS" "$DIST"
 download "$MAVEN/org/microemu/microemu-midp/2.0.4/microemu-midp-2.0.4.jar" "$MIDP_JAR"
+download "$MAVEN/org/microemu/cldcapi11/2.0.4/cldcapi11-2.0.4.jar" "$CLDC_JAR"
+download "$MAVEN/org/eclipse/jdt/ecj/3.33.0/ecj-3.33.0.jar" "$ECJ_JAR"
 download "$MAVEN/com/guardsquare/proguard-base/7.6.1/proguard-base-7.6.1.jar" "${PROGUARD_JARS[0]}"
 download "$MAVEN/com/guardsquare/proguard-core/9.1.7/proguard-core-9.1.7.jar" "${PROGUARD_JARS[1]}"
 download "$MAVEN/com/google/code/gson/gson/2.11.0/gson-2.11.0.jar" "${PROGUARD_JARS[2]}"
@@ -55,11 +62,15 @@ mkdir -p "$BUILD/classes" "$BUILD/stubs"
 
 # Stubs de JSR-179: solo para compilar.
 find stubs -name '*.java' > "$BUILD/stubs.txt"
-javac --release 8 -nowarn -d "$BUILD/stubs" @"$BUILD/stubs.txt"
+java -jar "$ECJ_JAR" -source 1.4 -target 1.4 -warn:none -encoding UTF-8 \
+  -bootclasspath "$CLDC_JAR" \
+  -d "$BUILD/stubs" @"$BUILD/stubs.txt"
 
-# Código de la app.
+# Código de la app. -source 1.4 + los stubs de CLDC fallan en cuanto se usa
+# algo que el móvil no tiene (StringBuilder, Math.asin, Math.round, ...).
 find src -name '*.java' > "$BUILD/src.txt"
-javac --release 8 -nowarn \
+java -jar "$ECJ_JAR" -source 1.4 -target 1.4 -warn:none -encoding UTF-8 \
+  -bootclasspath "$CLDC_JAR" \
   -cp "$MIDP_JAR:$BUILD/stubs" \
   -d "$BUILD/classes" @"$BUILD/src.txt"
 
@@ -86,6 +97,13 @@ java -cp "$(IFS=:; echo "${PROGUARD_JARS[*]}")" proguard.ProGuard @"$BUILD/progu
 # Comprobación de que el bytecode es CLDC (major 48) y no falta el MIDlet.
 if ! javap -verbose -cp "$BUILD/obf" corunabus.BusMIDlet | grep -q 'major version: 48'; then
   echo "ERROR: las clases no son CLDC 1.1 (major 48)" >&2
+  exit 1
+fi
+
+# Guardia anti-regresión: un solo StringBuilder en el JAR tumba el MIDlet en
+# el móvil aunque MicroEmulator lo ejecute sin problema.
+if grep -r -a -q 'java/lang/StringBuilder' "$BUILD/obf"; then
+  echo "ERROR: el JAR referencia java.lang.StringBuilder (no existe en CLDC 1.1)" >&2
   exit 1
 fi
 

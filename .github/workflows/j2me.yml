@@ -26,7 +26,16 @@ jobs:
 
       - name: Read version
         id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          # package.json apenas cambia entre builds J2ME, y el E71 usa
+          # MIDlet-Version para decidir si considera la app "nueva". Cada
+          # build debe llevar un número mayor que el anterior.
+          VERSION="$(node -e '
+            const [mayor, menor, parche] = require("./package.json").version.split(".").map(Number);
+            process.stdout.write(mayor + "." + menor + "." + (parche + Number(process.argv[1])));
+          ' "${{ github.run_number }}")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "MIDlet-Version: $VERSION"
 
       - name: Build MIDlet
         run: legacy/j2me/build.sh "${{ steps.version.outputs.version }}"

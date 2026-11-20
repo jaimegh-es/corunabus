@@ -140,15 +140,18 @@ public class Catalog {
         return true;
     }
 
-    /** Distancia en metros (haversine, entera). */
+    /**
+     * Distancia en metros. Equirectangular: para paradas cercanas (menos de
+     * 1,5 km) es tan precisa como haversine y no necesita Math.asin ni
+     * Math.round, que CLDC 1.1 NO tiene (el emulador las tiene y por eso el
+     * fallo solo aparecía en el móvil).
+     */
     public static int distance(int lat1, int lng1, int lat2, int lng2) {
         double a1 = (lat1 / 100000.0) * Math.PI / 180.0;
-        double a2 = (lat2 / 100000.0) * Math.PI / 180.0;
-        double dLat = a2 - a1;
-        double dLng = ((lng2 - lng1) / 100000.0) * Math.PI / 180.0;
-        double h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(a1) * Math.cos(a2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        return (int) Math.round(2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h))));
+        double dLat = ((lat2 - lat1) / 100000.0) * Math.PI / 180.0;
+        double dLng = ((lng2 - lng1) / 100000.0) * Math.PI / 180.0 * Math.cos(a1);
+        double meters = Math.sqrt(dLat * dLat + dLng * dLng) * 6371000;
+        return (int) Math.floor(meters + 0.5);
     }
 
     public static String normalize(String value) {
