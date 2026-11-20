@@ -18,6 +18,22 @@ public class Net {
     private Net() {
     }
 
+    /**
+     * GET con reserva: si el servidor está en https y el TLS del E71 no negocia,
+     * reintenta por http. Así basta con apagar "Always Use HTTPS" en Cloudflare
+     * sin tocar la dirección guardada.
+     */
+    public static String getPath(String baseUrl, String path) throws IOException {
+        try {
+            return get(baseUrl + path);
+        } catch (IOException error) {
+            if (baseUrl.startsWith("https://")) {
+                return get("http://" + baseUrl.substring(8) + path);
+            }
+            throw error;
+        }
+    }
+
     public static String get(String url) throws IOException {
         HttpConnection conn = null;
         InputStream in = null;

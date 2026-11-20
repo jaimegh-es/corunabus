@@ -121,7 +121,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             public void run() {
                 String text = null;
                 try {
-                    text = Net.get(baseUrl + "/j2me/catalog" + (refresh ? "?refresh=1" : ""));
+                    text = Net.getPath(baseUrl, "/j2me/catalog" + (refresh ? "?refresh=1" : ""));
                 } catch (Throwable t) {
                     text = null;
                 }
@@ -159,7 +159,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             public void run() {
                 String text;
                 try {
-                    text = Net.get(baseUrl + "/j2me/stop?id=" + stopId);
+                    text = Net.getPath(baseUrl, "/j2me/stop?id=" + stopId);
                 } catch (Throwable t) {
                     text = "ERR red";
                 }
@@ -464,7 +464,7 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 String text;
                 String suffix = time != null && time.length() > 0 ? "&t=" + Net.urlEncode(time) : "";
                 try {
-                    text = Net.get(baseUrl + "/j2me/plan?o=" + origin + "&d=" + destination + suffix);
+                    text = Net.getPath(baseUrl, "/j2me/plan?o=" + origin + "&d=" + destination + suffix);
                 } catch (Throwable t) {
                     text = "ERR red";
                 }
