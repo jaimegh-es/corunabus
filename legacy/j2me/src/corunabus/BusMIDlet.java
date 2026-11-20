@@ -66,13 +66,19 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             if (baseUrl == null || baseUrl.length() == 0) baseUrl = DEFAULT_URL;
 
             buildMenu();
-            // La interfaz aparece al instante; los datos se cargan detrás.
-            display.setCurrent(menu);
 
             String cached = Store.read(CATALOG_KEY);
             if (cached != null) catalog.parse(cached);
-            if (catalog.loaded) setMenuTitle("Coruña Bus");
-            else downloadCatalog(false);
+
+            // La interfaz aparece al instante; si no hay datos guardados se ve
+            // un aviso claro mientras se descargan en segundo plano.
+            if (catalog.loaded) {
+                setMenuTitle("Coruña Bus");
+                display.setCurrent(menu);
+            } else {
+                display.setCurrent(loadingScreen);
+                downloadCatalog(false);
+            }
         } catch (Throwable t) {
             crashed(t);
         }
@@ -80,13 +86,19 @@ public class BusMIDlet extends MIDlet implements CommandListener {
 
     /** Cambios de pantalla desde un hilo de fondo: pasan por el hilo de UI. */
     private void ui(Runnable action) {
-        try {
-            display.callSerially(action);
-        } catch (Throwable t) {
-            try {
-                action.run();
-            } catch (Throwable ignored) {
+        final Runnable safe = new Runnable() {
+            public void run() {
+                try {
+                    action.run();
+                } catch (Throwable t) {
+                    crashed(t);
+                }
             }
+        };
+        try {
+            display.callSerially(safe);
+        } catch (Throwable t) {
+            safe.run();
         }
     }
 
@@ -128,6 +140,12 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         menu.addCommand(exit);
         menu.setSelectCommand(ok);
         menu.setCommandListener(this);
+
+        loadingScreen = new List("Coruña Bus - cargando datos...", List.IMPLICIT);
+        loadingScreen.append("Descargando paradas y líneas...", null);
+        loadingScreen.append("Espera unos segundos.", null);
+        loadingScreen.addCommand(exit);
+        loadingScreen.setCommandListener(this);
     }
 
     private void showMenu() {
@@ -154,7 +172,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         final boolean refresh = manual;
         if (manual) showBusy("Actualizando datos...");
         else setMenuTitle("Coruña Bus - cargando datos...");
-        setLoading(true);
         new Thread(new Runnable() {
             public void run() {
                 String text = null;
@@ -185,7 +202,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                     ui(new Runnable() {
                         public void run() {
                             setMenuTitle("Coruña Bus");
-                            setLoading(false);
                             display.setCurrent(menu);
                             if (parsed) {
                                 if (manual) {
@@ -210,7 +226,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                     ui(new Runnable() {
                         public void run() {
                             setMenuTitle("Coruña Bus");
-                            setLoading(false);
                             showError("Fallo cargando datos: " + message);
                         }
                     });
@@ -482,21 +497,8 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     }
 
     private int[] nearbyIds = new int[0];
-    private boolean menuLoading = false;
-
-    /** Aviso visible en el menú mientras llega el catálogo. */
-    private void setLoading(boolean loading) {
-        try {
-            if (loading && !menuLoading) {
-                menu.append("Cargando paradas...", null);
-                menuLoading = true;
-            } else if (!loading && menuLoading) {
-                menu.delete(menu.size() - 1);
-                menuLoading = false;
-            }
-        } catch (Throwable ignored) {
-        }
-    }
+    /** Pantalla de aviso que se ve mientras llega el catálogo. */
+    private List loadingScreen;
 
     // --------------------------------------------------------- planificar
 
@@ -719,16 +721,17 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             return;
         }
 
+        if (d == loadingScreen) {
+            if (c == exit) notifyDestroyed();
+            return;
+        }
+
         if (d == menu) {
             if (c == exit) {
                 notifyDestroyed();
                 return;
             }
             int index = menu.getSelectedIndex();
-            if (menuLoading && index == menu.size() - 1) {
-                showError("Cargando la lista de paradas. Espera unos segundos.");
-                return;
-            }
             if (index <= 3 && !catalog.loaded) {
                 showError("Descargando la lista de paradas. Espera unos segundos.");
                 return;
