@@ -125,7 +125,14 @@ El workflow `.github/workflows/build-apk.yml` solo construye el APK y crea una r
 - `[RELEASE]` → sube la versión de patch (`0.0.3` → `0.0.4`).
 - `[RELEASE][1.2]` → fija la versión `1.2.0` (o usa `[RELEASE][2.3.4]` para una versión exacta).
 
-También se puede lanzar manualmente desde la pestaña *Actions* → *Build Android APK* → *Run workflow* (marcando `release` y, opcionalmente, indicando una versión). El despliegue de la web (worker de Cloudflare) es independiente y manual (`npm run deploy:web`).
+También se puede lanzar manualmente desde la pestaña *Actions* → *Build Android APK* → *Run workflow* (marcando `release` y, opcionalmente, indicando una versión). El despliegue de la web (worker de Cloudflare) es independiente y manual (`npm run deploy:web`).  
+
+### Aplicación J2ME (.jar) para Symbian S60 (Nokia, Sony Ericcson...) + Sitio web para moviles y navegadores antiguos [http://buscoruna.inled.es/m/](http://buscoruna.inled.es/m/)  
+
+Recientemente he adquirido un Nokia con Symbian para revivir aquellos buenos tiempos y hacer un poco de detox digital y viaje en el tiempo. Por ello he creado una aplicacion especifica para estos telefonos y una web adaptada, en caso de que no quieras instalar la app. Están diseñadas, tanto la web como la app, para consumir la menor memoria posible. Es por ellos que todo calculo se realiza en el Worker de CF y los datos se muestran escuetos.  
+Si alguien que esté leyendo este readme tiene un telefono en el que probar, que me escriba o  [se una a nuestro Telegram](https://link.inled.es/telegram) o [Discord](https://link.inled.es/discord) pues estoy interesado en conocer su experiencia.  
+
+**Por tu seguridad, la aplicacion j2me se construye en un Github Actions, asegurando la reproducibilidad y manteniendo la cadena de confianza, al no subirse de mi PC** Puedes incluso mirar el codigo del action,q ue es asombroso que la IA haya conseguido construir una app JavaME en un action :)
 
 ## Aviso legal
 
