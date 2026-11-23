@@ -37,6 +37,48 @@ export function parseClock(value: string | null | undefined, now = new Date()): 
   return date;
 }
 
+export type BusAlternative = OptionTiming;
+
+/**
+ * Buses que sirven la primera línea de una opción, del recomendado en adelante.
+ * Con hora límite se empieza por el último que aún llega a tiempo y se sigue
+ * con los siguientes, que llegan más tarde (el usuario puede preferirlos).
+ */
+export function busAlternatives(
+  option: PlanOption,
+  buses: number[],
+  now: Date,
+  target: Date | null,
+  max = 5,
+): BusAlternative[] {
+  if (!buses.length) return [];
+  const ordered = [...buses].sort((a, b) => a - b);
+
+  let start = 0;
+  if (target) {
+    let chosen = -1;
+    for (let i = 0; i < ordered.length; i++) {
+      const arrival = now.getTime() + (ordered[i] + option.totalMinutes) * 60_000;
+      if (arrival <= target.getTime()) chosen = i;
+    }
+    start = chosen >= 0 ? chosen : 0;
+  }
+
+  const out: BusAlternative[] = [];
+  for (let i = start; i < ordered.length && out.length < max; i++) {
+    const wait = ordered[i];
+    const depart = new Date(now.getTime() + wait * 60_000);
+    const arrive = new Date(depart.getTime() + option.totalMinutes * 60_000);
+    out.push({
+      waitMinutes: wait,
+      departAt: clock(depart),
+      arriveAt: clock(arrive),
+      late: target ? arrive.getTime() > target.getTime() : false,
+    });
+  }
+  return out;
+}
+
 export function timeOptions(
   options: PlanOption[],
   arrivals: Map<number, number[]>,

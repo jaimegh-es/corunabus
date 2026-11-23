@@ -12,7 +12,7 @@ import type { ArrivalLine } from './arrivals';
 import type { LegacyCatalog, LegacyStop } from './catalog';
 import { lineLabel } from './catalog';
 import type { PlanOption } from './planner';
-import type { OptionTiming } from './schedule';
+import type { BusAlternative, OptionTiming } from './schedule';
 import { stopName } from './catalog';
 
 const LINE_ENDING = '\r\n';
@@ -145,11 +145,15 @@ export function nearbyText(entries: Array<{ stop: LegacyStop; meters: number }>)
  * D <id>|<nombre>
  * R <n>|D|<linea>|<desde>|<hasta>|<paradas>|<min>|<andando_m>|<espera>|<llegada>|<tarde>
  * R <n>|T|<l1>|<desde>|<bajo>|<p1>|<m1>|<andando_m>|<l2>|<sube>|<hasta>|<p2>|<m2>|<espera>|<llegada>|<tarde>
+ * A <n>|<espera>|<sale>|<llega>|<tarde>
  * END
  *
  * <espera> son los minutos hasta el bus en la parada de origen (vacío si no
  * hay datos en vivo), <llegada> la hora HH:MM estimada y <tarde> 1 cuando con
  * ese bus ya no se cumple la hora pedida.
+ *
+ * Las líneas A son los próximos buses de cada opción (el recomendado primero y
+ * luego los que llegan más tarde), para elegir sin volver a pedir la ruta.
  */
 export function planText(
   catalog: LegacyCatalog,
@@ -157,6 +161,7 @@ export function planText(
   destId: number,
   options: PlanOption[],
   timings: OptionTiming[] = [],
+  alternatives: BusAlternative[][] = [],
 ): string {
   const records: string[] = [
     `O ${originId}|${sanitize(stopName(catalog, originId))}`,
@@ -182,6 +187,17 @@ export function planText(
     records.push(
       `R ${n}|T|${sanitize(first.line)}|${first.fromStopId}|${first.toStopId}|${first.stops}|${first.minutes}|${option.walkMeters}|${sanitize(second.line)}|${second.fromStopId}|${second.toStopId}|${second.stops}|${second.minutes}${tail}`,
     );
+  });
+
+  // Próximos buses de cada opción: el recomendado primero y después los que
+  // llegan más tarde, para poder elegir sin volver a pedir la ruta.
+  options.forEach((option, index) => {
+    const buses = alternatives[index] ?? [];
+    for (const bus of buses) {
+      records.push(
+        `A ${index + 1}|${bus.waitMinutes ?? ''}|${bus.departAt}|${bus.arriveAt}|${bus.late ? 1 : 0}`,
+      );
+    }
   });
 
   records.push('END');

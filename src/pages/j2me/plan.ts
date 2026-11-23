@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { getCatalog } from '../../services/catalog';
 import { getArrivals } from '../../services/arrivals';
 import { planRoute } from '../../services/planner';
-import { parseClock, timeOptions } from '../../services/schedule';
+import { busAlternatives, parseClock, timeOptions } from '../../services/schedule';
 import { errorResponse, planText, textResponse } from '../../services/legacyText';
 
 // GET /j2me/plan?o=523&d=180[&t=14:30]
@@ -45,9 +45,15 @@ export const GET: APIRoute = async ({ url }) => {
     }
 
     const timings = timeOptions(planned.options, arrivals, now, target);
-    return textResponse(planText(catalog, originId, destId, planned.options, timings), {
-      maxAge: 30,
-    });
+    const alternatives = planned.options.map((option) =>
+      busAlternatives(option, arrivals.get(option.legs[0].lineId) ?? [], now, target),
+    );
+    return textResponse(
+      planText(catalog, originId, destId, planned.options, timings, alternatives),
+      {
+        maxAge: 30,
+      },
+    );
   } catch (error) {
     console.error('j2me plan error', error);
     return errorResponse('upstream', 'No se pudo calcular la ruta', 502);

@@ -21,7 +21,7 @@ import javax.microedition.midlet.MIDlet;
  * calcula el servidor y llegan como texto plano. El catálogo se descarga una
  * vez y solo se vuelve a pedir con "Actualizar datos".
  */
-public class BusMIDlet extends MIDlet implements CommandListener {
+public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Listener {
 
     private static final String DEFAULT_URL = "https://buscoruna.inled.es";
     private static final String SETTINGS_KEY = "settings";
@@ -34,9 +34,14 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private String baseUrl = DEFAULT_URL;
 
     private List menu;
-    private List favoritesList;
-    private List stopPicker;
-    private List resultsList;
+    private ScrollList favoritesList;
+    private ScrollList stopPicker;
+    private ScrollList resultsList;
+    private ScrollList planList;
+    private ScrollList planTimesList;
+    private Vector planOptions = new Vector();
+    private Vector planBuses = new Vector();
+    private int planChoice = 0;
     private Form screen;
     private TextBox searchBox;
     private Form settingsScreen;
@@ -55,14 +60,12 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private int shownDest = 0;
     private String shownLabel = "";
     private boolean planScreen = false;
-    private TextBox timeBox;
 
     private final Command back = new Command("Atrás", Command.BACK, 2);
     private final Command exit = new Command("Salir", Command.EXIT, 3);
     private final Command refresh = new Command("Actualizar", Command.SCREEN, 2);
     private final Command save = new Command("Favorito", Command.SCREEN, 3);
     private final Command route = new Command("Ruta", Command.SCREEN, 4);
-    private final Command remove = new Command("Quitar", Command.SCREEN, 5);
     private final Command ok = new Command("OK", Command.OK, 1);
 
     protected void startApp() {
@@ -338,15 +341,12 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             display.setCurrent(alert, searchBox);
             return;
         }
-        resultsList = new List("Resultados", List.IMPLICIT);
+        resultsList = new ScrollList("Resultados");
+        resultsList.setListener(this);
         for (int i = 0; i < found.size(); i++) {
             Catalog.Stop stop = (Catalog.Stop) found.elementAt(i);
-            resultsList.append(stop.name + " #" + stop.id, null);
+            resultsList.add(stop.name + " #" + stop.id);
         }
-        resultsList.addCommand(ok);
-        resultsList.addCommand(back);
-        resultsList.setSelectCommand(ok);
-        resultsList.setCommandListener(this);
         display.setCurrent(resultsList);
     }
 
@@ -406,22 +406,39 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     private void openFavorites() {
         Vector entries = favoriteEntries();
         Vector plans = planEntries();
-        favoritesList = new List("Favoritos", List.IMPLICIT);
+        favoritesList = new ScrollList("Favoritos");
+        favoritesList.setListener(this);
         for (int i = 0; i < entries.size(); i++) {
-            String[] entry = (String[]) entries.elementAt(i);
-            favoritesList.append(entry[1], null);
+            favoritesList.add(((String[]) entries.elementAt(i))[1]);
         }
         for (int i = 0; i < plans.size(); i++) {
             String[] plan = (String[]) plans.elementAt(i);
             String suffix = plan[2].length() > 0 ? " (" + plan[2] + ")" : "";
-            favoritesList.append("Ruta: " + planTitle(plan) + suffix, null);
+            favoritesList.add("Ruta: " + planTitle(plan) + suffix);
         }
-        favoritesList.addCommand(ok);
-        favoritesList.addCommand(remove);
-        favoritesList.addCommand(back);
-        favoritesList.setSelectCommand(ok);
-        favoritesList.setCommandListener(this);
+        if (entries.size() + plans.size() == 0) {
+            favoritesList.add("Aún no hay favoritos.");
+        } else {
+            favoritesList.setExtraLabel("Quitar");
+        }
         display.setCurrent(favoritesList);
+    }
+
+    private void openFavorite(int index) {
+        Vector entries = favoriteEntries();
+        Vector plans = planEntries();
+        if (index >= 0 && index < entries.size()) {
+            selectStop(Catalog.parseInt(((String[]) entries.elementAt(index))[0], 0));
+        } else if (index - entries.size() >= 0 && index - entries.size() < plans.size()) {
+            String[] plan = (String[]) plans.elementAt(index - entries.size());
+            loadPlan(Catalog.parseInt(plan[0], 0), Catalog.parseInt(plan[1], 0), plan[2]);
+        }
+    }
+
+    private void removeFavoriteAt(int index) {
+        int stops = favoriteEntries().size();
+        if (index < stops) removeFavorite(index);
+        else removePlanFavorite(index - stops);
     }
 
     /** Rutas guardadas: String[] {origen, destino, hora, etiqueta}. */
@@ -545,20 +562,18 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             }
         }
 
-        stopPicker = new List("Paradas cercanas", List.IMPLICIT);
+        stopPicker = new ScrollList("Paradas cercanas");
+        stopPicker.setListener(this);
         int shown = 0;
         for (int i = 0; i < best.size() && shown < 8; i++) {
             Object[] entry = (Object[]) best.elementAt(i);
             Catalog.Stop stop = (Catalog.Stop) entry[0];
             int meters = ((Integer) entry[1]).intValue();
             if (meters > 1500) break;
-            stopPicker.append(stop.name + " (" + meters + " m)", null);
+            stopPicker.add(stop.name + " (" + meters + " m)");
             shown++;
         }
-        stopPicker.addCommand(ok);
-        stopPicker.addCommand(back);
-        stopPicker.setSelectCommand(ok);
-        stopPicker.setCommandListener(this);
+        if (shown == 0) stopPicker.add("No hay paradas cerca.");
         nearbyIds = new int[shown];
         for (int i = 0; i < shown; i++) {
             Object[] entry = (Object[]) best.elementAt(i);
@@ -584,15 +599,12 @@ public class BusMIDlet extends MIDlet implements CommandListener {
 
     private void chooseStop() {
         Vector entries = favoriteEntries();
-        stopPicker = new List(planMode == 2 ? "Destino" : "Origen", List.IMPLICIT);
+        stopPicker = new ScrollList(planMode == 2 ? "Destino" : "Origen");
+        stopPicker.setListener(this);
         for (int i = 0; i < entries.size(); i++) {
-            stopPicker.append(((String[]) entries.elementAt(i))[1], null);
+            stopPicker.add(((String[]) entries.elementAt(i))[1]);
         }
-        stopPicker.append("Buscar parada...", null);
-        stopPicker.addCommand(ok);
-        stopPicker.addCommand(back);
-        stopPicker.setSelectCommand(ok);
-        stopPicker.setCommandListener(this);
+        stopPicker.add("Buscar parada...");
         pickerIds = new int[entries.size()];
         for (int i = 0; i < entries.size(); i++) {
             pickerIds[i] = Catalog.parseInt(((String[]) entries.elementAt(i))[0], 0);
@@ -620,15 +632,23 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         }
     }
 
-    /** Pregunta la hora límite de llegada; vacío = salir ahora. */
+    /** Selector de hora límite de llegada; "Ahora" planifica sin hora. */
     private void askTime(final int origin, final int destination) {
         pendingOrigin = origin;
         pendingDest = destination;
-        timeBox = new TextBox("Llegar antes de las (HH:MM)", "", 5, TextField.ANY);
-        timeBox.addCommand(ok);
-        timeBox.addCommand(back);
-        timeBox.setCommandListener(this);
-        display.setCurrent(timeBox);
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        TimePicker picker = new TimePicker(now.get(java.util.Calendar.HOUR_OF_DAY),
+                now.get(java.util.Calendar.MINUTE), new TimePicker.Listener() {
+            public void timePicked(String hhmm) {
+                loadPlan(origin, destination, hhmm == null ? "" : hhmm);
+            }
+
+            public void timeCancelled() {
+                planMode = 0;
+                showMenu();
+            }
+        });
+        display.setCurrent(picker);
     }
 
     private void loadPlan(final int origin, final int destination, final String time) {
@@ -658,10 +678,11 @@ public class BusMIDlet extends MIDlet implements CommandListener {
 
     private void renderPlan(String text) {
         String[] lines = splitLines(text);
-        StringBuffer body = new StringBuffer();
         String originName = "";
         String destName = "";
-        boolean any = false;
+        String error = "";
+        planOptions.removeAllElements();
+        planBuses.removeAllElements();
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -673,39 +694,162 @@ public class BusMIDlet extends MIDlet implements CommandListener {
                 destName = f.length > 1 ? f[1] : "";
             } else if (line.startsWith("R ")) {
                 String[] f = Catalog.split(line.substring(2));
-                if (f.length < 2) continue;
-                if ("D".equals(f[1]) && f.length >= 8) {
-                    body.append(f[0]).append(") Línea ").append(f[2]).append(" directo\n");
-                    body.append("   ").append(f[5]).append(" paradas, ~").append(f[6]).append(" min\n");
-                    body.append("   Sube en ").append(nameOf(f[3])).append('\n');
-                    body.append("   Baja en ").append(nameOf(f[4])).append('\n');
-                    appendTiming(body, f, 8);
-                    body.append('\n');
-                    any = true;
-                } else if ("T".equals(f[1]) && f.length >= 12) {
-                    body.append(f[0]).append(") Línea ").append(f[2]).append(" + línea ").append(f[8]).append('\n');
-                    body.append("   ").append(f[5]).append(" paradas, ~").append(f[6]).append(" min\n");
-                    body.append("   Sube en ").append(nameOf(f[3])).append('\n');
-                    body.append("   Cambia en ").append(nameOf(f[4]));
-                    int walk = Catalog.parseInt(f[7], 0);
-                    if (walk > 0) body.append(" (").append(walk).append(" m andando)");
-                    body.append('\n');
-                    body.append("   Baja en ").append(nameOf(f[10])).append('\n');
-                    appendTiming(body, f, 13);
-                    body.append('\n');
-                    any = true;
-                }
+                if (f.length < 8) continue;
+                planOptions.addElement(f);
+                planBuses.addElement(new Vector());
+            } else if (line.startsWith("A ") && planBuses.size() > 0) {
+                String[] f = Catalog.split(line.substring(2));
+                if (f.length < 5) continue;
+                int n = Catalog.parseInt(f[0], 0) - 1;
+                if (n < 0 || n >= planBuses.size()) continue;
+                ((Vector) planBuses.elementAt(n)).addElement(
+                        new String[] { f[1], f[2], f[3], f[4] });
             } else if (line.startsWith("ERR")) {
-                body.append("No se pudo calcular la ruta.\n");
-                if (line.length() > 4) body.append(line.substring(4)).append('\n');
-                any = true;
+                error = line.length() > 4 ? line.substring(4).trim() : "";
             }
         }
 
-        if (!any) body.append("No hay ruta directa ni con un transbordo.");
-
         shownLabel = originName.length() > 0 ? originName + " -> " + destName : "Ruta";
-        screen = new Form(originName.length() > 0 ? originName + " -> " + destName : "Ruta");
+
+        if (planOptions.size() == 0) {
+            StringBuffer body = new StringBuffer();
+            if (error.length() > 0) body.append("No se pudo calcular la ruta.\n").append(error);
+            else body.append("No hay ruta directa ni con un transbordo.");
+            screen = new Form("Ruta");
+            planScreen = false;
+            planBody = new StringItem("", body.toString());
+            screen.append(planBody);
+            screen.addCommand(back);
+            screen.setCommandListener(this);
+            display.setCurrent(screen);
+            return;
+        }
+
+        planList = new ScrollList(shownLabel);
+        planList.setListener(this);
+        for (int i = 0; i < planOptions.size(); i++) {
+            planList.add(optionLabel((String[]) planOptions.elementAt(i)));
+        }
+        display.setCurrent(planList);
+    }
+
+    /** "Línea 14 directo · 8 par · 16 min · llega 08:41". */
+    private String optionLabel(String[] f) {
+        StringBuffer out = new StringBuffer();
+        if ("D".equals(f[1])) out.append("Línea ").append(f[2]).append(" directo");
+        else out.append("Línea ").append(f[2]).append(" + ").append(f[8]);
+        out.append(" · ").append(f[5]).append(" par · ").append(f[6]).append(" min");
+        String arrive = field(f, "D".equals(f[1]) ? 9 : 14);
+        if (arrive.length() > 0) out.append(" · llega ").append(arrive);
+        if ("1".equals(field(f, "D".equals(f[1]) ? 10 : 15))) out.append(" (tarde)");
+        return out.toString();
+    }
+
+    private String planSummary(String[] f) {
+        StringBuffer out = new StringBuffer();
+        if ("D".equals(f[1])) out.append("Línea ").append(f[2]);
+        else out.append("Línea ").append(f[2]).append(" + ").append(f[8]);
+        out.append(" · ").append(f[5]).append(" par · ").append(f[6]).append(" min");
+        String arrive = field(f, "D".equals(f[1]) ? 9 : 14);
+        if (arrive.length() > 0) out.append(" · llega ").append(arrive);
+        return out.toString();
+    }
+
+    private String field(String[] f, int index) {
+        return index >= 0 && index < f.length ? f[index] : "";
+    }
+
+    /** Buses siguientes de una opción: el recomendado y los que llegan más tarde. */
+    private void openPlanTimes(int index) {
+        if (index < 0 || index >= planOptions.size()) return;
+        planChoice = index;
+        String[] f = (String[]) planOptions.elementAt(index);
+        Vector buses = (Vector) planBuses.elementAt(index);
+
+        planTimesList = new ScrollList(planSummary(f));
+        planTimesList.setListener(this);
+
+        if (buses.size() > 0) {
+            for (int i = 0; i < buses.size(); i++) {
+                String[] b = (String[]) buses.elementAt(i);
+                planTimesList.add(busLabel(b[0], b[1], b[2], b[3]));
+            }
+        } else {
+            int base = "D".equals(f[1]) ? 8 : 13;
+            String wait = field(f, base);
+            String arrive = field(f, base + 1);
+            String late = field(f, base + 2);
+            if (wait.length() == 0 && arrive.length() == 0) planTimesList.add("Sin datos en vivo.");
+            else planTimesList.add(busLabel(wait, "", arrive, late));
+        }
+        display.setCurrent(planTimesList);
+    }
+
+    private String busLabel(String wait, String depart, String arrive, String late) {
+        StringBuffer out = new StringBuffer();
+        if (depart.length() > 0) {
+            out.append(depart);
+            if (wait.length() > 0) out.append(" (en ").append(wait).append(" min)");
+        } else if (wait.length() > 0) {
+            out.append("En ").append(wait).append(" min");
+        } else {
+            out.append("Próximo bus");
+        }
+        if (arrive.length() > 0) out.append(" · llega ").append(arrive);
+        if ("1".equals(late)) out.append(" · tarde");
+        return out.toString();
+    }
+
+    /** Itinerario de la opción con el bus elegido. */
+    private void openPlanDetail(int busIndex) {
+        if (planChoice < 0 || planChoice >= planOptions.size()) return;
+        String[] f = (String[]) planOptions.elementAt(planChoice);
+        Vector buses = (Vector) planBuses.elementAt(planChoice);
+
+        String wait;
+        String depart = "";
+        String arrive;
+        String late;
+        if (busIndex >= 0 && busIndex < buses.size()) {
+            String[] b = (String[]) buses.elementAt(busIndex);
+            wait = b[0];
+            depart = b[1];
+            arrive = b[2];
+            late = b[3];
+        } else {
+            int base = "D".equals(f[1]) ? 8 : 13;
+            wait = field(f, base);
+            arrive = field(f, base + 1);
+            late = field(f, base + 2);
+        }
+
+        StringBuffer body = new StringBuffer();
+        if ("D".equals(f[1])) {
+            body.append("Línea ").append(f[2]).append(" directo\n");
+            body.append(f[5]).append(" paradas, ~").append(f[6]).append(" min\n");
+            body.append("Sube en ").append(nameOf(f[3])).append('\n');
+            body.append("Baja en ").append(nameOf(f[4])).append('\n');
+        } else {
+            body.append("Línea ").append(f[2]).append(" + línea ").append(f[8]).append('\n');
+            body.append(f[5]).append(" paradas, ~").append(f[6]).append(" min\n");
+            body.append("Sube en ").append(nameOf(f[3])).append('\n');
+            body.append("Cambia en ").append(nameOf(f[4]));
+            int walk = Catalog.parseInt(f[7], 0);
+            if (walk > 0) body.append(" (").append(walk).append(" m andando)");
+            body.append('\n');
+            body.append("Baja en ").append(nameOf(f[10])).append('\n');
+        }
+
+        if (depart.length() > 0) body.append("Sale a las ").append(depart);
+        else if (wait.length() > 0) body.append("Bus en ").append(wait).append(" min");
+        if (arrive.length() > 0) {
+            if (body.length() > 0 && body.charAt(body.length() - 1) != '\n') body.append(" · ");
+            body.append("llega a las ").append(arrive);
+        }
+        if ("1".equals(late)) body.append(" (no llega a tiempo)");
+        if (body.length() > 0 && body.charAt(body.length() - 1) != '\n') body.append('\n');
+
+        screen = new Form("Ruta");
         planScreen = true;
         planBody = new StringItem("", body.toString());
         screen.append(planBody);
@@ -713,21 +857,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         screen.addCommand(back);
         screen.setCommandListener(this);
         display.setCurrent(screen);
-    }
-
-    /** Espera real en origen y hora estimada de llegada (campos del servidor). */
-    private void appendTiming(StringBuffer body, String[] f, int index) {
-        String wait = index < f.length ? f[index] : "";
-        String arrive = index + 1 < f.length ? f[index + 1] : "";
-        String late = index + 2 < f.length ? f[index + 2] : "";
-        if (wait.length() > 0) {
-            body.append("   Bus en ").append(wait).append(" min\n");
-        }
-        if (arrive.length() > 0) {
-            body.append("   Llega a las ").append(arrive);
-            if ("1".equals(late)) body.append(" (no llega a tiempo)");
-            body.append('\n');
-        }
     }
 
     private String nameOf(String stopId) {
@@ -782,23 +911,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
     }
 
     private void handleCommand(Command c, Displayable d) {
-        if (d == timeBox) {
-            if (c == back) {
-                showMenu();
-                return;
-            }
-            String time = timeBox.getString().trim();
-            if (time.length() > 0 && !validTime(time)) {
-                Alert alert = new Alert("Hora");
-                alert.setString("Escribe HH:MM, por ejemplo 14:30. Vacío = salir ahora.");
-                alert.setTimeout(4000);
-                display.setCurrent(alert, timeBox);
-                return;
-            }
-            loadPlan(pendingOrigin, pendingDest, time);
-            return;
-        }
-
         if (d == loadingScreen) {
             if (c == exit) notifyDestroyed();
             return;
@@ -824,11 +936,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             return;
         }
 
-        if (d == screen && c == save && planScreen) {
-            savePlanFavorite();
-            return;
-        }
-
         if (d == searchBox) {
             if (c == back) {
                 planMode = 0;
@@ -839,71 +946,79 @@ public class BusMIDlet extends MIDlet implements CommandListener {
             return;
         }
 
-        if (d == resultsList) {
-            if (c == back) {
-                if (planMode != 0) chooseStop();
-                else display.setCurrent(searchBox);
-                return;
-            }
-            int id = resultId(resultsList.getSelectedIndex());
-            if (id > 0) selectStop(id);
-            return;
-        }
-
-        if (d == favoritesList) {
-            if (c == back) {
-                showMenu();
-                return;
-            }
-            Vector entries = favoriteEntries();
-            Vector plans = planEntries();
-            int index = favoritesList.getSelectedIndex();
-            if (c == remove) {
-                if (index < entries.size()) removeFavorite(index);
-                else removePlanFavorite(index - entries.size());
-                return;
-            }
-            if (index >= 0 && index < entries.size()) {
-                selectStop(Catalog.parseInt(((String[]) entries.elementAt(index))[0], 0));
-            } else if (index >= entries.size()) {
-                String[] plan = (String[]) plans.elementAt(index - entries.size());
-                loadPlan(Catalog.parseInt(plan[0], 0), Catalog.parseInt(plan[1], 0), plan[2]);
-            }
-            return;
-        }
-
-        if (d == stopPicker) {
-            if (c == back) {
-                planMode = 0;
-                showMenu();
-                return;
-            }
-            int index = stopPicker.getSelectedIndex();
-            if (planMode != 0) {
-                if (index < pickerIds.length) {
-                    selectStop(pickerIds[index]);
-                } else {
-                    openSearch();
-                }
-                return;
-            }
-            if (index >= 0 && index < nearbyIds.length) openStop(nearbyIds[index]);
-            return;
-        }
-
         if (d == screen) {
             if (c == refresh) {
                 openStop(currentStop);
             } else if (c == save) {
-                saveFavorite();
+                if (planScreen) savePlanFavorite();
+                else saveFavorite();
             } else if (c == route) {
                 planOrigin = currentStop;
                 planMode = 2;
                 chooseStop();
+            } else if (planScreen && planTimesList != null) {
+                display.setCurrent(planTimesList);
             } else {
                 showMenu();
             }
         }
+    }
+
+    // --------------------------------------------------------------- listas
+
+    public void listSelected(ScrollList list, int index) {
+        try {
+            if (list == planList) {
+                openPlanTimes(index);
+            } else if (list == planTimesList) {
+                openPlanDetail(index);
+            } else if (list == favoritesList) {
+                openFavorite(index);
+            } else if (list == resultsList) {
+                int id = resultId(index);
+                if (id > 0) selectStop(id);
+            } else if (list == stopPicker) {
+                pickStop(index);
+            }
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    public void listBack(ScrollList list) {
+        try {
+            if (list == planTimesList) {
+                display.setCurrent(planList);
+            } else if (list == resultsList && planMode == 0) {
+                display.setCurrent(searchBox);
+            } else if (list == resultsList) {
+                chooseStop();
+            } else if (list == stopPicker) {
+                planMode = 0;
+                showMenu();
+            } else {
+                showMenu();
+            }
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    public void listExtra(ScrollList list, int index) {
+        try {
+            if (list == favoritesList) removeFavoriteAt(index);
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    private void pickStop(int index) {
+        if (planMode != 0) {
+            if (index < pickerIds.length) selectStop(pickerIds[index]);
+            else openSearch();
+            return;
+        }
+        if (index >= 0 && index < nearbyIds.length) openStop(nearbyIds[index]);
     }
 
     // ------------------------------------------------------------ utilidades
@@ -921,14 +1036,6 @@ public class BusMIDlet extends MIDlet implements CommandListener {
         String[] out = new String[parts.size()];
         for (int i = 0; i < out.length; i++) out[i] = (String) parts.elementAt(i);
         return out;
-    }
-
-    private static boolean validTime(String value) {
-        int colon = value.indexOf(':');
-        if (colon < 1 || colon >= value.length() - 1 || value.length() - colon > 3) return false;
-        int hours = Catalog.parseInt(value.substring(0, colon), -1);
-        int minutes = Catalog.parseInt(value.substring(colon + 1), -1);
-        return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
     }
 
     private static String clean(String value) {
