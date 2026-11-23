@@ -13,6 +13,7 @@ import type { LegacyCatalog, LegacyStop } from './catalog';
 import { lineLabel } from './catalog';
 import type { PlanOption } from './planner';
 import type { BusAlternative, OptionTiming } from './schedule';
+import { clock } from './schedule';
 import { stopName } from './catalog';
 
 const LINE_ENDING = '\r\n';
@@ -116,9 +117,7 @@ export function stopText(
     records.push(`L ${sanitize(entry.code)}|${entry.minutes.join(',')}`);
   }
 
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  records.push(`T ${hh}:${mm}`);
+  records.push(`T ${clock(now)}`);
   records.push('END');
 
   return lines(records);

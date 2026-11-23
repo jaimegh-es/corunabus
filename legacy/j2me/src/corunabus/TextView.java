@@ -55,16 +55,12 @@ public class TextView extends Canvas implements CommandListener {
         return small().getHeight() + 8;
     }
 
-    private int barHeight() {
-        return small().getHeight() + 6;
-    }
-
     private int lineHeight() {
         return small().getHeight() + 2;
     }
 
     private int visibleLines() {
-        int rows = (getHeight() - titleHeight() - barHeight()) / lineHeight();
+        int rows = (getHeight() - titleHeight()) / lineHeight();
         return rows < 1 ? 1 : rows;
     }
 
@@ -97,7 +93,6 @@ public class TextView extends Canvas implements CommandListener {
         int h = getHeight();
         int pad = 4;
         int titleH = titleHeight();
-        int barH = barHeight();
         int lineH = lineHeight();
 
         if (!wrapped) {
@@ -108,7 +103,7 @@ public class TextView extends Canvas implements CommandListener {
         g.setColor(0xFFFFFF);
         g.fillRect(0, 0, w, h);
 
-        g.setColor(0x1F3B5B);
+        g.setColor(0xD32F2F);
         g.fillRect(0, 0, w, titleH);
         g.setColor(0xFFFFFF);
         g.setFont(font);
@@ -134,17 +129,8 @@ public class TextView extends Canvas implements CommandListener {
             g.setColor(0xBBBBBB);
             g.fillRect(w - 3, titleH, 3, rows * lineH);
             int thumb = rows * lineH * rows / lines.size();
-            g.setColor(0x1F3B5B);
+            g.setColor(0xD32F2F);
             g.fillRect(w - 3, titleH + (rows * lineH - thumb) * top / (lines.size() - rows), 3, thumb);
-        }
-
-        int by = h - barH;
-        g.setColor(0xE6E6E6);
-        g.fillRect(0, by, w, barH);
-        g.setColor(0x444444);
-        g.drawString("Atrás", pad, by + 3, Graphics.TOP | Graphics.LEFT);
-        if (extraCommand != null) {
-            g.drawString(extraCommand.getLabel(), w - pad, by + 3, Graphics.TOP | Graphics.RIGHT);
         }
     }
 

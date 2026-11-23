@@ -130,12 +130,8 @@ public class ScrollList extends Canvas implements Runnable, CommandListener {
         return small().getHeight() + 8;
     }
 
-    private int barHeight() {
-        return small().getHeight() + 6;
-    }
-
     private int visibleRows() {
-        int rows = (getHeight() - titleHeight() - barHeight()) / rowHeight();
+        int rows = (getHeight() - titleHeight()) / rowHeight();
         return rows < 1 ? 1 : rows;
     }
 
@@ -145,7 +141,6 @@ public class ScrollList extends Canvas implements Runnable, CommandListener {
         int h = getHeight();
         int pad = 4;
         int titleH = titleHeight();
-        int barH = barHeight();
         int rowH = rowHeight();
         int rows = visibleRows();
 
@@ -153,7 +148,7 @@ public class ScrollList extends Canvas implements Runnable, CommandListener {
         g.fillRect(0, 0, w, h);
 
         // Barra de título con la posición dentro de la lista.
-        g.setColor(0x1F3B5B);
+        g.setColor(0xD32F2F);
         g.fillRect(0, 0, w, titleH);
         g.setColor(0xFFFFFF);
         g.setFont(small);
@@ -181,7 +176,7 @@ public class ScrollList extends Canvas implements Runnable, CommandListener {
             int y = titleH + i * rowH;
             boolean sel = index == selected;
             if (sel) {
-                g.setColor(0x1F3B5B);
+                g.setColor(0xD32F2F);
                 g.fillRect(0, y, w, rowH);
             }
             Font font = sel ? bold() : small;
@@ -205,22 +200,8 @@ public class ScrollList extends Canvas implements Runnable, CommandListener {
             int thumbY = titleH + (trackH - thumbH) * top / (items.size() - rows);
             g.setColor(0xBBBBBB);
             g.fillRect(w - 3, titleH, 3, trackH);
-            g.setColor(0x1F3B5B);
+            g.setColor(0xD32F2F);
             g.fillRect(w - 3, thumbY, 3, thumbH);
-        }
-
-        if (barH > 0) {
-            int by = h - barH;
-            g.setColor(0xE6E6E6);
-            g.fillRect(0, by, w, barH);
-            g.setColor(0x444444);
-            g.setFont(small);
-            g.drawString(backLabel == null ? "Atrás" : backLabel, pad, by + 3,
-                    Graphics.TOP | Graphics.LEFT);
-            if (extraLabel != null) {
-                g.drawString(extraLabel, w - pad, by + 3,
-                        Graphics.TOP | Graphics.RIGHT);
-            }
         }
     }
 

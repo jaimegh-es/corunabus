@@ -20,11 +20,51 @@ export function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-export function clock(date: Date): string {
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+// El worker corre en UTC, pero las horas de A Coruña son las de Madrid: sin
+// esto el reloj del planificador salía una o dos horas desplazado.
+const TIME_ZONE = 'Europe/Madrid';
+
+const partsFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
+interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
 }
 
-/** "HH:MM" (o "H:MM") al día de hoy; null si viene vacío o mal. */
+function madridParts(date: Date): WallClock {
+  const out: WallClock = { year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0 };
+  for (const part of partsFormat.formatToParts(date)) {
+    const value = Number(part.value);
+    if (part.type === 'year') out.year = value;
+    else if (part.type === 'month') out.month = value;
+    else if (part.type === 'day') out.day = value;
+    else if (part.type === 'hour') out.hour = value % 24;
+    else if (part.type === 'minute') out.minute = value;
+    else if (part.type === 'second') out.second = value;
+  }
+  return out;
+}
+
+/** Hora de A Coruña "HH:MM". */
+export function clock(date: Date = new Date()): string {
+  const parts = madridParts(date);
+  return `${pad2(parts.hour)}:${pad2(parts.minute)}`;
+}
+
+/** "HH:MM" (o "H:MM") de hoy en A Coruña; null si viene vacío o mal. */
 export function parseClock(value: string | null | undefined, now = new Date()): Date | null {
   if (!value) return null;
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
@@ -32,9 +72,11 @@ export function parseClock(value: string | null | undefined, now = new Date()): 
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   if (hours > 23 || minutes > 59) return null;
-  const date = new Date(now.getTime());
-  date.setHours(hours, minutes, 0, 0);
-  return date;
+
+  const parts = madridParts(now);
+  const wallNow = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  const offset = wallNow - Math.floor(now.getTime() / 1000) * 1000;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hours, minutes) - offset);
 }
 
 export type BusAlternative = OptionTiming;
@@ -42,14 +84,15 @@ export type BusAlternative = OptionTiming;
 /**
  * Buses que sirven la primera línea de una opción, del recomendado en adelante.
  * Con hora límite se empieza por el último que aún llega a tiempo y se sigue
- * con los siguientes, que llegan más tarde (el usuario puede preferirlos).
+ * con los siguientes, que llegan más tarde (el usuario puede preferirlos),
+ * añadiendo un par de anteriores para poder ir un poco antes.
  */
 export function busAlternatives(
   option: PlanOption,
   buses: number[],
   now: Date,
   target: Date | null,
-  max = 5,
+  max = 6,
 ): BusAlternative[] {
   if (!buses.length) return [];
   const ordered = [...buses].sort((a, b) => a - b);
@@ -64,8 +107,10 @@ export function busAlternatives(
     start = chosen >= 0 ? chosen : 0;
   }
 
+  const from = target ? Math.max(0, start - 2) : start;
+
   const out: BusAlternative[] = [];
-  for (let i = start; i < ordered.length && out.length < max; i++) {
+  for (let i = from; i < ordered.length && out.length < max; i++) {
     const wait = ordered[i];
     const depart = new Date(now.getTime() + wait * 60_000);
     const arrive = new Date(depart.getTime() + option.totalMinutes * 60_000);
