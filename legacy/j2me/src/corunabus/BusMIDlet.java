@@ -42,6 +42,8 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
     private Vector planOptions = new Vector();
     private Vector planBuses = new Vector();
     private int planChoice = 0;
+    private int planBoardStop = 0;
+    private boolean stopFromPlan = false;
     private Form screen;
     private TextView planDetail;
     private TextBox searchBox;
@@ -147,6 +149,7 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
     }
 
     private void showMenu() {
+        stopFromPlan = false;
         display.setCurrent(menu);
     }
 
@@ -272,7 +275,8 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
                 if (minutes.length() == 0) {
                     body.append("sin datos");
                 } else {
-                    body.append(minutes.replace(',', ' '));
+                    int comma = minutes.indexOf(',');
+                    body.append(comma > 0 ? minutes.substring(0, comma) : minutes);
                     body.append(" min");
                 }
                 body.append("\n");
@@ -752,6 +756,7 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         if (index < 0 || index >= planOptions.size()) return;
         planChoice = index;
         String[] f = (String[]) planOptions.elementAt(index);
+        planBoardStop = Catalog.parseInt(f[3], 0);
         Vector buses = (Vector) planBuses.elementAt(index);
         int base = "D".equals(f[1]) ? 8 : 13;
 
@@ -805,7 +810,7 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
             }
         }
 
-        planDetail = new TextView("Ruta", body.toString(), "Favorito", this);
+        planDetail = new TextView("Ruta", body.toString(), "Parada", "Favorito", this);
         display.setCurrent(planDetail);
     }
 
@@ -900,6 +905,9 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
                 planOrigin = currentStop;
                 planMode = 2;
                 chooseStop();
+            } else if (stopFromPlan && planDetail != null) {
+                stopFromPlan = false;
+                display.setCurrent(planDetail);
             } else {
                 showMenu();
             }
@@ -918,7 +926,19 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         }
     }
 
+    /** Abre la parada de salida para ver cuánto le queda al bus. */
     public void textExtra() {
+        try {
+            if (planBoardStop > 0) {
+                stopFromPlan = true;
+                openStop(planBoardStop);
+            }
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    public void textExtra2() {
         try {
             savePlanFavorite();
         } catch (Throwable t) {

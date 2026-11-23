@@ -22,6 +22,9 @@ public class TextView extends Canvas implements CommandListener {
         void textBack();
 
         void textExtra();
+
+        /** Segunda acción extra (la primera va en la tecla blanda derecha). */
+        void textExtra2();
     }
 
     private final Vector lines = new Vector();
@@ -29,11 +32,17 @@ public class TextView extends Canvas implements CommandListener {
     private final Listener listener;
     private Command backCommand;
     private Command extraCommand;
+    private Command extraCommand2;
     private final String text;
     private boolean wrapped = false;
     private int top = 0;
 
     public TextView(String title, String text, String extraLabel, Listener listener) {
+        this(title, text, extraLabel, null, listener);
+    }
+
+    public TextView(String title, String text, String extraLabel, String extraLabel2,
+            Listener listener) {
         this.title = title;
         this.text = text == null ? "" : text;
         this.listener = listener;
@@ -43,6 +52,10 @@ public class TextView extends Canvas implements CommandListener {
         if (extraLabel != null) {
             extraCommand = new Command(extraLabel, Command.SCREEN, 2);
             addCommand(extraCommand);
+        }
+        if (extraLabel2 != null) {
+            extraCommand2 = new Command(extraLabel2, Command.SCREEN, 3);
+            addCommand(extraCommand2);
         }
         setCommandListener(this);
     }
@@ -172,6 +185,7 @@ public class TextView extends Canvas implements CommandListener {
 
     public void commandAction(Command c, Displayable d) {
         if (c == extraCommand) listener.textExtra();
+        else if (c == extraCommand2) listener.textExtra2();
         else listener.textBack();
     }
 }
