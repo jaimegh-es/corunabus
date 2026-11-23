@@ -3,6 +3,9 @@ package corunabus;
 import java.util.Vector;
 
 import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Command;
+import javax.microedition.lcdui.CommandListener;
+import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
 
@@ -14,8 +17,12 @@ import javax.microedition.lcdui.Graphics;
  * fila, así que aquí se dibuja todo a mano. Las teclas son las del teléfono:
  * arriba/abajo (o 2/8), OK (o 5), tecla blanda izquierda (o 0) para volver y
  * derecha (o -7) para la acción extra.
+ *
+ * Además de las teclas se registran comandos de verdad, para que la tecla
+ * blanda del teléfono (y la de la derecha con la acción extra) siempre
+ * funcionen aunque el modelo mapee otras teclas.
  */
-public class ScrollList extends Canvas implements Runnable {
+public class ScrollList extends Canvas implements Runnable, CommandListener {
 
     public interface Listener {
         void listSelected(ScrollList list, int index);
@@ -39,10 +46,14 @@ public class ScrollList extends Canvas implements Runnable {
     private String extraLabel = null;
     private boolean visible = false;
     private Thread worker;
+    private Command backCommand = new Command("Atrás", Command.BACK, 1);
+    private Command extraCommand;
 
     public ScrollList(String title) {
         this.title = title;
         setTitle(title);
+        addCommand(backCommand);
+        setCommandListener(this);
     }
 
     public void setListener(Listener listener) {
@@ -51,10 +62,29 @@ public class ScrollList extends Canvas implements Runnable {
 
     public void setBackLabel(String label) {
         this.backLabel = label;
+        try {
+            removeCommand(backCommand);
+        } catch (Throwable ignored) {
+        }
+        backCommand = new Command(label, Command.BACK, 1);
+        addCommand(backCommand);
     }
 
     public void setExtraLabel(String label) {
+        if (extraCommand != null) {
+            removeCommand(extraCommand);
+            extraCommand = null;
+        }
         this.extraLabel = label;
+        if (label != null) {
+            extraCommand = new Command(label, Command.SCREEN, 2);
+            addCommand(extraCommand);
+        }
+    }
+
+    public void commandAction(Command c, Displayable d) {
+        if (c == extraCommand) extra();
+        else back();
     }
 
     public void add(String text) {
@@ -101,7 +131,7 @@ public class ScrollList extends Canvas implements Runnable {
     }
 
     private int barHeight() {
-        return extraLabel != null ? small().getHeight() + 6 : 0;
+        return small().getHeight() + 6;
     }
 
     private int visibleRows() {
@@ -185,10 +215,12 @@ public class ScrollList extends Canvas implements Runnable {
             g.fillRect(0, by, w, barH);
             g.setColor(0x444444);
             g.setFont(small);
-            g.drawString(backLabel == null ? "" : backLabel, pad, by + 3,
+            g.drawString(backLabel == null ? "Atrás" : backLabel, pad, by + 3,
                     Graphics.TOP | Graphics.LEFT);
-            String extra = extraLabel == null ? "" : extraLabel;
-            g.drawString(extra, w - pad, by + 3, Graphics.TOP | Graphics.RIGHT);
+            if (extraLabel != null) {
+                g.drawString(extraLabel, w - pad, by + 3,
+                        Graphics.TOP | Graphics.RIGHT);
+            }
         }
     }
 

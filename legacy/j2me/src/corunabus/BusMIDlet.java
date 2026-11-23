@@ -21,7 +21,8 @@ import javax.microedition.midlet.MIDlet;
  * calcula el servidor y llegan como texto plano. El catálogo se descarga una
  * vez y solo se vuelve a pedir con "Actualizar datos".
  */
-public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Listener {
+public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Listener,
+        TextView.Listener {
 
     private static final String DEFAULT_URL = "https://buscoruna.inled.es";
     private static final String SETTINGS_KEY = "settings";
@@ -43,12 +44,12 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
     private Vector planBuses = new Vector();
     private int planChoice = 0;
     private Form screen;
+    private TextView planDetail;
     private TextBox searchBox;
     private Form settingsScreen;
 
     private int currentStop = 0;
     private StringItem stopBody;
-    private StringItem planBody;
 
     // 0 = navegando, 1 = eligiendo origen, 2 = eligiendo destino
     private int planMode = 0;
@@ -59,7 +60,6 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
     private int shownOrigin = 0;
     private int shownDest = 0;
     private String shownLabel = "";
-    private boolean planScreen = false;
 
     private final Command back = new Command("Atrás", Command.BACK, 2);
     private final Command exit = new Command("Salir", Command.EXIT, 3);
@@ -306,7 +306,6 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         screen = new Form(title);
         stopBody = new StringItem("", body.toString());
         screen.append(stopBody);
-        planScreen = false;
         screen.addCommand(refresh);
         screen.addCommand(save);
         screen.addCommand(route);
@@ -715,13 +714,8 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
             StringBuffer body = new StringBuffer();
             if (error.length() > 0) body.append("No se pudo calcular la ruta.\n").append(error);
             else body.append("No hay ruta directa ni con un transbordo.");
-            screen = new Form("Ruta");
-            planScreen = false;
-            planBody = new StringItem("", body.toString());
-            screen.append(planBody);
-            screen.addCommand(back);
-            screen.setCommandListener(this);
-            display.setCurrent(screen);
+            planDetail = new TextView("Ruta", body.toString(), null, this);
+            display.setCurrent(planDetail);
             return;
         }
 
@@ -849,14 +843,8 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         if ("1".equals(late)) body.append(" (no llega a tiempo)");
         if (body.length() > 0 && body.charAt(body.length() - 1) != '\n') body.append('\n');
 
-        screen = new Form("Ruta");
-        planScreen = true;
-        planBody = new StringItem("", body.toString());
-        screen.append(planBody);
-        screen.addCommand(save);
-        screen.addCommand(back);
-        screen.setCommandListener(this);
-        display.setCurrent(screen);
+        planDetail = new TextView("Ruta", body.toString(), "Favorito", this);
+        display.setCurrent(planDetail);
     }
 
     private String nameOf(String stopId) {
@@ -950,17 +938,35 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
             if (c == refresh) {
                 openStop(currentStop);
             } else if (c == save) {
-                if (planScreen) savePlanFavorite();
-                else saveFavorite();
+                saveFavorite();
             } else if (c == route) {
                 planOrigin = currentStop;
                 planMode = 2;
                 chooseStop();
-            } else if (planScreen && planTimesList != null) {
-                display.setCurrent(planTimesList);
             } else {
                 showMenu();
             }
+        }
+    }
+
+    // ------------------------------------------------------ detalle de ruta
+
+    /** Atrás desde el itinerario: siempre vuelve a la lista de buses. */
+    public void textBack() {
+        try {
+            if (planTimesList != null) display.setCurrent(planTimesList);
+            else if (planList != null) display.setCurrent(planList);
+            else showMenu();
+        } catch (Throwable t) {
+            crashed(t);
+        }
+    }
+
+    public void textExtra() {
+        try {
+            savePlanFavorite();
+        } catch (Throwable t) {
+            crashed(t);
         }
     }
 
