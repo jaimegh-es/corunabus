@@ -1,8 +1,11 @@
-# Coruña Bus
+<div style="text-align: center;">
+<h1>CoruñaBus </h1>
+<p>La app de los buses creada por quien usa el bus diariamente. Lo que necesitas, lo tiene </p>
+<img src="public/logo.png" width="auto" height="50px"> 
 
-![Coruña Bus Banner](/public/corunabus.svg)
+---
+</div>
 
-> La app de los buses creada por quien usa el bus diariamente. Lo que necesitas, lo tiene
 
 CoruñaBus es una aplicación para los buses urbanos de La Coruña que desarrollé tras la experiencia con la app oficial (imposible de usar) y la no oficial (BusCoruña, con anuncios por doquier y sin o que necesitaba).  
 Esta aplicación, disponible tanto en web, PWA como en aplicacion nativa para Android (ya que en el bus nadie usa iPhone), ofrece una gran cantidad de funciones para hacer más sencillo el uso de los buses. Listadas a continuación:
