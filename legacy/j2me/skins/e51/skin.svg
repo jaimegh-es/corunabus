@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="760" viewBox="0 0 360 760">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#15181c"/>
+      <stop offset="0.12" stop-color="#2b3037"/>
+      <stop offset="0.5" stop-color="#3a4048"/>
+      <stop offset="0.88" stop-color="#2b3037"/>
+      <stop offset="1" stop-color="#15181c"/>
+    </linearGradient>
+    <linearGradient id="key" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#525a64"/>
+      <stop offset="1" stop-color="#31363d"/>
+    </linearGradient>
+    <linearGradient id="nav" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6d757f"/>
+      <stop offset="1" stop-color="#3b414a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cuerpo del E51 -->
+  <rect x="4" y="4" width="352" height="752" rx="30" fill="url(#body)" stroke="#8d949e" stroke-width="2"/>
+  <rect x="10" y="10" width="340" height="740" rx="26" fill="none" stroke="#0c0e11" stroke-width="1"/>
+
+  <!-- Marco de la pantalla y zona de dibujo 320x240 en (20,28) -->
+  <rect x="14" y="22" width="332" height="252" rx="10" fill="#08090a"/>
+  <rect x="20" y="28" width="320" height="240" fill="#ffffff"/>
+
+  <!-- Teclas blandas -->
+  <rect x="26" y="288" width="132" height="30" rx="8" fill="url(#key)" stroke="#77808b"/>
+  <rect x="202" y="288" width="132" height="30" rx="8" fill="url(#key)" stroke="#77808b"/>
+
+  <!-- Tecla de navegación -->
+  <circle cx="180" cy="372" r="54" fill="url(#nav)" stroke="#7d858f"/>
+  <circle cx="180" cy="372" r="40" fill="#2a2f36" stroke="#1b1f24"/>
+  <rect x="162" y="354" width="36" height="36" rx="8" fill="#5b636d" stroke="#8f979f"/>
+  <polygon points="180,324 192,342 168,342" fill="#aab2bb"/>
+  <polygon points="180,420 192,402 168,402" fill="#aab2bb"/>
+  <polygon points="128,372 146,360 146,384" fill="#aab2bb"/>
+  <polygon points="232,372 214,360 214,384" fill="#aab2bb"/>
+
+  <!-- Teclado -->
+  <g fill="url(#key)" stroke="#77808b">
+    <rect x="54" y="440" width="80" height="52" rx="10"/>
+    <rect x="140" y="440" width="80" height="52" rx="10"/>
+    <rect x="226" y="440" width="80" height="52" rx="10"/>
+    <rect x="54" y="502" width="80" height="52" rx="10"/>
+    <rect x="140" y="502" width="80" height="52" rx="10"/>
+    <rect x="226" y="502" width="80" height="52" rx="10"/>
+    <rect x="54" y="564" width="80" height="52" rx="10"/>
+    <rect x="140" y="564" width="80" height="52" rx="10"/>
+    <rect x="226" y="564" width="80" height="52" rx="10"/>
+    <rect x="54" y="626" width="80" height="52" rx="10"/>
+    <rect x="140" y="626" width="80" height="52" rx="10"/>
+    <rect x="226" y="626" width="80" height="52" rx="10"/>
+  </g>
+  <g fill="#dfe4ea" font-family="DejaVu Sans, Sans" font-size="22" text-anchor="middle">
+    <text x="94" y="475">1</text>
+    <text x="180" y="475">2</text>
+    <text x="266" y="475">3</text>
+    <text x="94" y="537">4</text>
+    <text x="180" y="537">5</text>
+    <text x="266" y="537">6</text>
+    <text x="94" y="599">7</text>
+    <text x="180" y="599">8</text>
+    <text x="266" y="599">9</text>
+    <text x="94" y="661">*</text>
+    <text x="180" y="661">0</text>
+    <text x="266" y="661">#</text>
+  </g>
+
+  <text x="180" y="722" fill="#6d757f" font-family="DejaVu Sans, Sans" font-size="16"
+        text-anchor="middle" letter-spacing="6">NOKIA</text>
+</svg>

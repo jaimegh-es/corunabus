@@ -109,6 +109,12 @@ const t = getTranslations(lang);
     </form>
   </div>
 
+  <!-- Aviso de plan guardado con hora ya pasada (se rellena por JS). -->
+  <div id="past-time-notice" class="planner-notice" role="status" hidden>
+    <span id="past-time-notice-text"></span>
+    <button type="button" id="past-time-change" class="planner-notice-btn"></button>
+  </div>
+
   <div id="results" class="results-container">
     <!-- Results will be injected here -->
   </div>
@@ -156,6 +162,38 @@ const t = getTranslations(lang);
     margin-top: 0.5rem;
     font-size: 0.75rem;
     color: var(--text-muted);
+  }
+
+  .planner-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .planner-notice[hidden] {
+    display: none;
+  }
+
+  .planner-notice-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #92400e;
+    font: inherit;
+    font-weight: 800;
+    text-decoration: underline;
+    cursor: pointer;
+    white-space: nowrap;
   }
 
   .future-date-banner {
@@ -903,8 +941,23 @@ const t = getTranslations(lang);
 
       const plannerMode = urlParams.get('plannerMode') || 'now';
       const targetTime = urlParams.get('targetTime');
+      const targetDate = urlParams.get('targetDate');
 
-      if (plannerMode === 'arrive' && targetTime) {
+      if (plannerMode === 'arrive' && targetTime && this.isPastTarget(targetTime, targetDate)) {
+        // Saved plan whose arrival time already passed (e.g. a favourite from
+        // yesterday): don't plan silently for a past hour. Switch to "leave
+        // now", explain it, and offer to pick a new time.
+        // Plan guardado con hora ya pasada: no planificar en silencio para una
+        // hora pasada. Pasar a "salir ahora", avisar y ofrecer otra hora.
+        this.plannerMode = 'now';
+        const buttons = this.querySelectorAll('.mode-btn');
+        buttons.forEach(btn => {
+          btn.classList.toggle('active', btn.getAttribute('data-mode') === 'now');
+        });
+        const timeGroup = this.querySelector('#target-time-group') as HTMLElement;
+        if (timeGroup) timeGroup.style.display = 'none';
+        this.showPastTimeNotice(targetTime);
+      } else if (plannerMode === 'arrive' && targetTime) {
         this.plannerMode = 'arrive';
         
         const buttons = this.querySelectorAll('.mode-btn');
@@ -935,7 +988,6 @@ const t = getTranslations(lang);
         if (timeGroup) timeGroup.style.display = 'none';
       }
 
-      const targetDate = urlParams.get('targetDate');
       if (targetDate) {
         this.plannedDate = targetDate;
       }
@@ -946,12 +998,56 @@ const t = getTranslations(lang);
     }
 
 
+    // A target time is in the past when its date+time is not later than now.
+    // A missing date means today, which is what the planner uses by default.
+    // Una hora objetivo está pasada cuando su fecha+hora no es posterior a
+    // ahora. Sin fecha se asume hoy, que es lo que usa el planificador.
+    isPastTarget(time: string, date?: string | null): boolean {
+      const [h, m] = time.split(':').map(Number);
+      if (!Number.isFinite(h) || !Number.isFinite(m)) return false;
+      const target = new Date();
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const [y, mo, d] = date.split('-').map(Number);
+        target.setFullYear(y, mo - 1, d);
+      }
+      target.setHours(h, m, 0, 0);
+      return target.getTime() <= Date.now();
+    }
+
+    showPastTimeNotice(time: string) {
+      const notice = this.querySelector('#past-time-notice') as HTMLElement | null;
+      const text = this.querySelector('#past-time-notice-text');
+      const btn = this.querySelector('#past-time-change') as HTMLButtonElement | null;
+      if (!notice) return;
+
+      if (text) {
+        text.textContent = lang === 'en'
+          ? `The arrival time (${time}) has already passed, so we switched to leaving now. Choose a new time if you want to plan with another hour.`
+          : `La hora de llegada (${time}) ya ha pasado, así que hemos cambiado a salir ahora. Si quieres, elige una nueva hora.`;
+      }
+      if (btn) {
+        btn.textContent = lang === 'en' ? 'Choose a new time' : 'Elegir nueva hora';
+        btn.onclick = () => {
+          notice.hidden = true;
+          (this.querySelector('.mode-btn[data-mode="arrive"]') as HTMLButtonElement | null)?.click();
+          (this.querySelector('#target-time') as HTMLInputElement | null)?.focus();
+        };
+      }
+      notice.hidden = false;
+    }
+
+    hidePastTimeNotice() {
+      const notice = this.querySelector('#past-time-notice') as HTMLElement | null;
+      if (notice) notice.hidden = true;
+    }
+
     setupModeToggle() {
       const buttons = this.querySelectorAll('.mode-btn');
       const timeGroup = this.querySelector('#target-time-group') as HTMLElement;
       
       buttons.forEach(btn => {
         btn.addEventListener('click', () => {
+          this.hidePastTimeNotice();
           buttons.forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           this.plannerMode = btn.getAttribute('data-mode') as 'now' | 'arrive';
@@ -1029,6 +1125,7 @@ const t = getTranslations(lang);
       const form = this.querySelector('#calc-form');
       form?.addEventListener('submit', (e) => {
         e.preventDefault();
+        this.hidePastTimeNotice();
         this.calculate();
       });
     }

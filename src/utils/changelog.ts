@@ -14,6 +14,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: '0.0.17',
+        title: '👆 Planificador, ubicación y comunidad',
+        items: [
+            'El planificador ya no abre una ruta sola al hacer scroll: la tarjeta solo responde a un toque real, igual que en favoritos.',
+            'La web ya no pide la ubicación todo el rato: solo se pregunta cuando pulsas un botón de GPS; las lecturas automáticas se hacen en silencio si ya diste permiso.',
+            'En el Nokia, la hora de llegada se respeta de verdad: primero ves el bus recomendado y, si hay varios próximos, eliges cuál te interesa antes de ver su detalle.',
+            'Las tarjetas de favoritos del inicio tienen ahora el mismo diseño que en la página de Favoritos.',
+            'Únete a Discord o Telegram (abajo) para enterarte de las novedades y avisar de fallos. ¡La comunidad también ayuda a que la app mejore!',
+        ],
+    },
+    {
         version: '0.0.16',
         title: '🔧 Ajustes de interfaz, permisos y favoritos',
         items: [

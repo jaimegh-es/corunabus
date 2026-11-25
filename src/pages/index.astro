@@ -94,7 +94,8 @@ const t = getTranslations(lang);
     <script>
         import { storage } from '../utils/storage';
         import { tracking } from '../utils/tracking';
-        import { createIcons, ChevronRight, Cloud, Sun, CloudRain, CloudLightning, Thermometer, ExternalLink, Image } from 'lucide';
+        import { guardPhantomClicks } from '../utils/phantomClicks';
+        import { createIcons, ChevronRight, Map, Cloud, Sun, CloudRain, CloudLightning, Thermometer, ExternalLink, Image } from 'lucide';
 
         const lang = document.documentElement.getAttribute('data-lang') || 'es';
         let allNews: any[] = [];
@@ -257,6 +258,7 @@ const t = getTranslations(lang);
             // El resumen del inicio muestra TODOS los favoritos de TODOS los
             // tipos (paradas, rutas de línea y trayectos del planificador),
             // la lista completa: el enlace "ver todos" lleva a /favorites.
+            const stopNames = storage.getStopNames();
             let html = '';
             if (favIds.length > 0) {
                 html += `
@@ -264,20 +266,21 @@ const t = getTranslations(lang);
                         ${favIds.map(id => {
                             const s = catalog.paradas[id];
                             if (!s) return '';
+                            const displayName = stopNames[String(id)] || s.nombre;
                             return `
-                                <div class="card fav-item" role="link" tabindex="0" data-href="/stop/${s.id}">
-                                    <div class="fav-info">
-                                        <strong>${s.nombre}</strong>
-                                        <div class="fav-lines">
-                                            ${s.enlaces.slice(0, 4).map((lId: any) => {
+                                <div class="card stop-card-link" role="link" tabindex="0" data-href="/stop/${s.id}">
+                                    <div class="stop-info">
+                                        <strong>${displayName}</strong>
+                                        <small>${lang === 'en' ? 'Stop' : 'Parada'} ${s.id}</small>
+                                        <div class="stop-lines">
+                                            ${s.enlaces.map((lId: any) => {
                                                 const info = lineMap[lId];
                                                 if (!info) return '';
-                                                return `<span class="line-dot" style="background-color: #${info.color}" title="${info.name}"></span>`;
+                                                return `<span class="line-tag" style="background-color: #${info.color}">${info.name}</span>`;
                                             }).join('')}
-                                            ${s.enlaces.length > 4 ? '<span class="more-dots">...</span>' : ''}
                                         </div>
                                     </div>
-                                    <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
+                                    <div class="stop-arrow"><i data-lucide="chevron-right"></i></div>
                                 </div>
                             `;
                         }).join('')}
@@ -293,19 +296,28 @@ const t = getTranslations(lang);
                             const dest = catalog.paradas[r.destId];
                             const line = lines.find((l: any) => l.id === r.lineId);
                             const color = line ? `#${line.color}` : 'var(--primary)';
-                            const destLabel = dest?.nombre || (lang === 'en' ? 'Destination' : 'Destino');
-                            const originLabel = origin?.nombre || (lang === 'en' ? 'Origin' : 'Origen');
-                            const fromLabel = lang === 'en' ? 'From' : 'Desde';
+
+                            // Same URL and markup as /favorites: opening the card
+                            // highlights today's bus for that destination/time.
+                            // Misma URL y markup que /favorites: al abrir la
+                            // tarjeta se resalta el bus de hoy para ese destino/hora.
+                            const rParams = new URLSearchParams();
+                            rParams.set('dest', String(r.destId));
+                            rParams.set('line', String(r.lineId));
+                            if (r.plannerMode) rParams.set('mode', r.plannerMode);
+                            if (r.targetTime) rParams.set('time', r.targetTime);
+                            const rHref = `/stop/${r.originId}?${rParams.toString()}`;
+
                             return `
-                                <div class="card fav-item route-fav" role="link" tabindex="0" style="--line-color: ${color}" data-href="/stop/${r.originId}" data-dest="${r.destId}">
-                                    <div class="route-info">
-                                        <span class="route-line-badge" style="background-color: ${color}">${r.lineName}</span>
-                                        <div class="route-text">
-                                            <strong>${destLabel}</strong>
-                                            <small>${fromLabel} ${originLabel}</small>
+                                <div class="card route-fav-card favorite-route-link" role="link" tabindex="0" style="--line-color: ${color}" data-href="${rHref}" data-dest="${r.destId}">
+                                    <div class="route-fav-header">
+                                        <span class="line-badge-small" style="background-color: ${color}">${r.lineName}</span>
+                                        <div class="route-fav-text">
+                                            <strong>${origin?.nombre || (lang === 'en' ? 'Origin' : 'Origen')} &rarr; ${dest?.nombre || (lang === 'en' ? 'Destination' : 'Destino')}</strong>
+                                            <small>${lang === 'en' ? 'From stop' : 'Desde parada'} ${r.originId}${r.plannerMode === 'arrive' && r.targetTime ? ` • 🕒 ${lang === 'en' ? 'Arrive at' : 'Llegar a las'} ${r.targetTime}` : ''}</small>
                                         </div>
                                     </div>
-                                    <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
+                                    <div class="stop-arrow"><i data-lucide="chevron-right"></i></div>
                                 </div>
                             `;
                         }).join('')}
@@ -346,14 +358,20 @@ const t = getTranslations(lang);
                             if (r.targetTime) params.set('targetTime', r.targetTime);
 
                             return `
-                                <div class="card fav-item planner-fav" role="link" tabindex="0" data-href="/planner?${params.toString()}">
-                                    <div class="fav-info">
-                                        <strong>${originName} &rarr; ${destName}</strong>
-                                        <small style="color: var(--text-muted, #64748b); font-size: 0.75rem;">
-                                            ${lang === 'en' ? 'Journey' : 'Trayecto'}${r.plannerMode === 'arrive' && r.targetTime ? ` • 🕒 ${lang === 'en' ? 'Arrive at' : 'Llegar a las'} ${r.targetTime}` : ''}
-                                        </small>
+                                <div class="card route-fav-card favorite-planner-link" role="link" tabindex="0" style="--line-color: var(--primary)" data-href="/planner?${params.toString()}">
+                                    <div class="route-fav-header">
+                                        <span class="line-badge-small flex-center" style="background-color: var(--primary); display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;">
+                                            <i data-lucide="map" style="width: 16px; height: 16px; color: white;"></i>
+                                        </span>
+                                        <div class="route-fav-text">
+                                            <strong>${originName} &rarr; ${destName}</strong>
+                                            <small>
+                                                ${r.origin.type === 'stop' ? (lang === 'en' ? 'Stop ' : 'Parada ') + r.origin.id : (lang === 'en' ? 'My location' : 'Mi ubicación')} &rarr; ${r.destination.type === 'stop' ? (lang === 'en' ? 'Stop ' : 'Parada ') + r.destination.id : (lang === 'en' ? 'Location' : 'Ubicación')}
+                                                ${r.plannerMode === 'arrive' && r.targetTime ? ` • 🕒 ${lang === 'en' ? 'Arrive at' : 'Llegar a las'} ${r.targetTime}` : ''}
+                                            </small>
+                                        </div>
                                     </div>
-                                    <div class="fav-arrow"><i data-lucide="chevron-right"></i></div>
+                                    <div class="stop-arrow"><i data-lucide="chevron-right"></i></div>
                                 </div>
                             `;
                         }).join('')}
@@ -361,44 +379,42 @@ const t = getTranslations(lang);
                 `;
             }
             container.innerHTML = html;
-            createIcons({ icons: { ChevronRight } });
-            container.querySelectorAll<HTMLElement>('.route-fav').forEach(link => {
-                const href = link.getAttribute('data-href');
-                link.addEventListener('click', (e) => {
-                    if (!e.isTrusted) return;
-                    if (e.target instanceof Element && e.target.closest('button')) return;
-                    const destId = link.getAttribute('data-dest');
-                    if (destId) tracking.setTargetDestination(parseInt(destId));
-                    if (href) window.location.href = href;
-                });
-                link.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        const destId = link.getAttribute('data-dest');
-                        if (destId) tracking.setTargetDestination(parseInt(destId));
-                        if (href) window.location.href = href;
-                    }
-                });
-            });
+            createIcons({ icons: { ChevronRight, Map } });
 
-            container.querySelectorAll<HTMLElement>('.fav-item:not(.route-fav)').forEach((card) => {
+            // Cards are not anchors: navigation only on a trusted click, so a
+            // scroll that ends over a card cannot open it natively.
+            // Las tarjetas no son enlaces: solo navega un click de confianza,
+            // así un scroll que acaba encima no las abre de forma nativa.
+            container.querySelectorAll<HTMLElement>('.stop-card-link, .route-fav-card').forEach((card) => {
                 const href = card.getAttribute('data-href');
                 if (!href) return;
+                const open = () => {
+                    const destId = card.getAttribute('data-dest');
+                    if (destId) tracking.setTargetDestination(parseInt(destId));
+                    window.location.href = href;
+                };
                 card.addEventListener('click', (e) => {
                     if (!e.isTrusted) return;
                     if (e.target instanceof Element && e.target.closest('button')) return;
-                    window.location.href = href;
+                    open();
                 });
                 card.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        window.location.href = href;
+                        open();
                     }
                 });
             });
         }
 
         const initialInfo = tracking.get();
+
+        // Same phantom-click guard as /favorites, installed on the container so
+        // it survives every repaint.
+        // Mismo blindaje de clics fantasma que en /favorites, en el contenedor
+        // para que sobreviva a los repintados.
+        const favoritesSummary = document.getElementById('favorites-summary');
+        if (favoritesSummary) guardPhantomClicks(favoritesSummary);
 
         renderFavorites();
         fetchWeather();
@@ -680,104 +696,9 @@ const t = getTranslations(lang);
         gap: 0.75rem;
     }
 
-    .fav-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
+    .summary-list .stop-card-link,
+    .summary-list .route-fav-card {
         margin-bottom: 0;
-        text-decoration: none;
-        color: inherit;
-        border: 1px solid transparent;
-        transition: all 0.2s;
-    }
-
-    .fav-item:active {
-        background-color: #f9f9f9;
-        border-color: #eee;
-        transform: translateY(-2px);
-    }
-
-    .fav-info {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .fav-info strong {
-        font-size: 1rem;
-    }
-
-    .fav-lines {
-        display: flex;
-        gap: 4px;
-        align-items: center;
-    }
-
-    .line-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-    }
-
-    .more-dots {
-        font-size: 0.7rem;
-        color: var(--text-muted);
-    }
-
-    .fav-arrow {
-        color: #ccc;
-    }
-
-    .route-fav {
-        position: relative;
-        padding-left: 1.25rem;
-    }
-
-    .route-fav::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 4px;
-        background-color: var(--line-color);
-        border-radius: 12px 0 0 12px;
-    }
-
-    .route-info {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        min-width: 0;
-    }
-
-    .route-line-badge {
-        color: white;
-        font-weight: 800;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        min-width: 30px;
-        text-align: center;
-    }
-
-    .route-text {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-    }
-
-    .route-text strong {
-        font-size: 0.95rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .route-text small {
-        font-size: 0.75rem;
-        color: var(--text-muted);
     }
 
     .empty-favorites {

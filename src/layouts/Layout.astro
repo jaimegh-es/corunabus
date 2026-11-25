@@ -188,8 +188,9 @@ const { title } = Astro.props;
                             {t.sugerencias}
                         </a>
                     </div>
-                    <!-- Community links (Discord + Telegram)
-                         Enlaces de comunidad (Discord + Telegram) -->
+                    <!-- Community invitation + links (Discord + Telegram)
+                         Invitación a la comunidad + enlaces (Discord + Telegram) -->
+                    <p class="community-invite">{t.communityInvite}</p>
                     <div class="recommendation-actions">
                         <a
                             href="https://link.inled.es/discord"
@@ -543,6 +544,15 @@ const { title } = Astro.props;
                 </div>
                 <div class="modal-body">
                     <ul id="changelog-items" class="changelog-list"></ul>
+                    <!-- Comunidad: el aviso es el mejor momento para pedir que
+                         se unan y así poder avisar de fallos y novedades. -->
+                    <div class="changelog-community">
+                        <p>{t.communityInvite}</p>
+                        <div class="changelog-community-actions">
+                            <a href="https://link.inled.es/discord" target="_blank" rel="noopener noreferrer" class="btn-community-subtle">Discord</a>
+                            <a href="https://link.inled.es/telegram" target="_blank" rel="noopener noreferrer" class="btn-community-subtle">Telegram</a>
+                        </div>
+                    </div>
                 </div>
                 <div class="settings-actions">
                     <button type="button" id="changelog-ok" class="btn-primary">{t.changelogOk}</button>
@@ -968,6 +978,99 @@ const { title } = Astro.props;
         padding: 1rem;
         margin-bottom: 1rem;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+    }
+
+    /* Shared favorite cards (home + /favorites).
+       Tarjetas de favoritos compartidas (inicio + /favorites). */
+    .stop-card-link, .route-fav-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    .route-fav-card {
+        position: relative;
+        border-left: none !important;
+        overflow: hidden;
+    }
+
+    .route-fav-card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        background-color: var(--line-color, var(--primary));
+    }
+
+    .stop-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .stop-lines {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 0.5rem;
+    }
+
+    .line-tag {
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: white;
+    }
+
+    .stop-arrow {
+        color: #ccc;
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .route-fav-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-grow: 1;
+        min-width: 0;
+    }
+
+    .line-badge-small {
+        color: white;
+        font-weight: 800;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        min-width: 35px;
+        text-align: center;
+    }
+
+    .route-fav-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .route-fav-text strong {
+        font-size: 0.95rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .route-fav-text small {
+        font-size: 0.75rem;
+        color: var(--text-muted);
     }
 
     button {
@@ -1658,6 +1761,39 @@ const { title } = Astro.props;
 
     .btn-community-subtle {
         gap: 0.4rem;
+    }
+
+    .community-invite {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
+        color: var(--text-muted) !important;
+        text-align: center;
+        margin: 0 !important;
+    }
+
+    .changelog-community {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #eee;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .changelog-community p {
+        margin: 0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-align: center;
+    }
+
+    .changelog-community-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        justify-content: center;
     }
 
     .contact-info {

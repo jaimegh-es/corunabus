@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device name="Nokia E51 (S60)"
+        xmlns="http://www.microemu.org/2.0.2/"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.microemu.org/2.0.2/ http://www.microemu.org/2.0.2/device.xsd">
+    <system-properties>
+        <system-property name="microedition.platform" value="NokiaE51/S60" />
+    </system-properties>
+    <img name="normal" src="normal.png" />
+    <display>
+        <iscolor>true</iscolor>
+        <numcolors>65536</numcolors>
+        <numalphalevels>256</numalphalevels>
+        <foreground>000000</foreground>
+        <background>ffffff</background>
+        <rectangle>
+            <x>20</x>
+            <y>28</y>
+            <width>320</width>
+            <height>240</height>
+        </rectangle>
+        <paintable>
+            <x>0</x>
+            <y>0</y>
+            <width>320</width>
+            <height>240</height>
+        </paintable>
+    </display>
+    <fonts hint="antialiasing">
+        <font face="proportional" style="plain" size="small">
+            <system name="SansSerif" style="plain" size="11" />
+        </font>
+        <font face="proportional" style="plain" size="medium">
+            <system name="SansSerif" style="plain" size="13" />
+        </font>
+        <font face="proportional" style="plain" size="large">
+            <system name="SansSerif" style="plain" size="15" />
+        </font>
+        <font face="proportional" style="bold" size="small">
+            <system name="SansSerif" style="bold" size="11" />
+        </font>
+        <font face="proportional" style="bold" size="medium">
+            <system name="SansSerif" style="bold" size="13" />
+        </font>
+        <font face="proportional" style="bold" size="large">
+            <system name="SansSerif" style="bold" size="15" />
+        </font>
+    </fonts>
+    <input>
+        <haspointerevents>true</haspointerevents>
+        <haspointermotionevents>true</haspointermotionevents>
+        <hasrepeatevents>true</hasrepeatevents>
+        <softbutton name="SOFT1" alignment="LEFT">
+            <rectangle>
+                <x>26</x>
+                <y>288</y>
+                <width>132</width>
+                <height>30</height>
+            </rectangle>
+            <command>BACK</command>
+            <command>EXIT</command>
+            <command>CANCEL</command>
+            <command>STOP</command>
+        </softbutton>
+        <softbutton name="SOFT2" alignment="RIGHT">
+            <rectangle>
+                <x>202</x>
+                <y>288</y>
+                <width>132</width>
+                <height>30</height>
+            </rectangle>
+            <command>OK</command>
+            <command>SCREEN</command>
+            <command>ITEM</command>
+            <command>HELP</command>
+        </softbutton>
+        <button name="UP">
+            <rectangle>
+                <x>162</x>
+                <y>322</y>
+                <width>36</width>
+                <height>26</height>
+            </rectangle>
+        </button>
+        <button name="DOWN">
+            <rectangle>
+                <x>162</x>
+                <y>396</y>
+                <width>36</width>
+                <height>26</height>
+            </rectangle>
+        </button>
+        <button name="LEFT">
+            <rectangle>
+                <x>128</x>
+                <y>356</y>
+                <width>26</width>
+                <height>32</height>
+            </rectangle>
+        </button>
+        <button name="RIGHT">
+            <rectangle>
+                <x>206</x>
+                <y>356</y>
+                <width>26</width>
+                <height>32</height>
+            </rectangle>
+        </button>
+        <button name="SELECT">
+            <rectangle>
+                <x>162</x>
+                <y>354</y>
+                <width>36</width>
+                <height>36</height>
+            </rectangle>
+        </button>
+        <button name="1">
+            <chars>
+                <char>.</char>
+                <char>,</char>
+                <char>?</char>
+                <char>!</char>
+                <char>-</char>
+                <char>1</char>
+            </chars>
+            <rectangle>
+                <x>54</x>
+                <y>440</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="2">
+            <chars>
+                <char>a</char>
+                <char>b</char>
+                <char>c</char>
+                <char>2</char>
+            </chars>
+            <rectangle>
+                <x>140</x>
+                <y>440</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="3">
+            <chars>
+                <char>d</char>
+                <char>e</char>
+                <char>f</char>
+                <char>3</char>
+            </chars>
+            <rectangle>
+                <x>226</x>
+                <y>440</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="4">
+            <chars>
+                <char>g</char>
+                <char>h</char>
+                <char>i</char>
+                <char>4</char>
+            </chars>
+            <rectangle>
+                <x>54</x>
+                <y>502</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="5">
+            <chars>
+                <char>j</char>
+                <char>k</char>
+                <char>l</char>
+                <char>5</char>
+            </chars>
+            <rectangle>
+                <x>140</x>
+                <y>502</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="6">
+            <chars>
+                <char>m</char>
+                <char>n</char>
+                <char>o</char>
+                <char>6</char>
+            </chars>
+            <rectangle>
+                <x>226</x>
+                <y>502</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="7">
+            <chars>
+                <char>p</char>
+                <char>q</char>
+                <char>r</char>
+                <char>s</char>
+                <char>7</char>
+            </chars>
+            <rectangle>
+                <x>54</x>
+                <y>564</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="8">
+            <chars>
+                <char>t</char>
+                <char>u</char>
+                <char>v</char>
+                <char>8</char>
+            </chars>
+            <rectangle>
+                <x>140</x>
+                <y>564</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="9">
+            <chars>
+                <char>w</char>
+                <char>x</char>
+                <char>y</char>
+                <char>z</char>
+                <char>9</char>
+            </chars>
+            <rectangle>
+                <x>226</x>
+                <y>564</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="ASTERISK">
+            <chars>
+                <char>*</char>
+                <char>+</char>
+            </chars>
+            <rectangle>
+                <x>54</x>
+                <y>626</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="0">
+            <chars>
+                <char> </char>
+                <char>0</char>
+            </chars>
+            <rectangle>
+                <x>140</x>
+                <y>626</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+        <button name="POUND" modeChange="true">
+            <rectangle>
+                <x>226</x>
+                <y>626</y>
+                <width>80</width>
+                <height>52</height>
+            </rectangle>
+        </button>
+    </input>
+</device>
