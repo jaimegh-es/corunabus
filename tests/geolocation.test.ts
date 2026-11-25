@@ -51,8 +51,26 @@ function removeGeolocation() {
   });
 }
 
+/** Firefox/Chrome answer query({ name: 'geolocation' }) with this shape. */
+function installPermission(state: 'granted' | 'denied' | 'prompt') {
+  Object.defineProperty(globalThis.navigator, 'permissions', {
+    value: { query: vi.fn(async () => ({ state })) },
+    configurable: true,
+    writable: true,
+  });
+}
+
+function removePermission() {
+  Object.defineProperty(globalThis.navigator, 'permissions', {
+    value: undefined,
+    configurable: true,
+    writable: true,
+  });
+}
+
 afterEach(() => {
   removeGeolocation();
+  removePermission();
   vi.restoreAllMocks();
 });
 
@@ -67,7 +85,8 @@ describe('getPosition()', () => {
     expect(mock.calls[0].enableHighAccuracy).toBe(false);
   });
 
-  it('retries once with high accuracy when the first call fails, and returns the fix', async () => {
+  it('retries once with high accuracy when the first call fails and permission is granted', async () => {
+    installPermission('granted');
     const mock = installGeolocation([
       { success: false, code: 3 }, // TIMEOUT
       { success: true },
@@ -82,6 +101,7 @@ describe('getPosition()', () => {
   });
 
   it('returns null when both attempts fail', async () => {
+    installPermission('granted');
     const mock = installGeolocation([
       { success: false, code: 3 },
       { success: false, code: 2 }, // POSITION_UNAVAILABLE
@@ -99,6 +119,68 @@ describe('getPosition()', () => {
     const result = await getPosition();
 
     expect(result).toBeNull();
+    expect(mock.calls).toHaveLength(1);
+  });
+
+  it('does not even call geolocation when the permission is denied', async () => {
+    installPermission('denied');
+    const mock = installGeolocation([{ success: true }]);
+
+    const result = await getPosition();
+
+    expect(result).toBeNull();
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('does not retry while the permission is still pending a prompt', async () => {
+    installPermission('prompt');
+    const mock = installGeolocation([
+      { success: false, code: 3 }, // TIMEOUT: the dialog was not answered
+      { success: true },
+    ]);
+
+    const result = await getPosition();
+
+    expect(result).toBeNull();
+    expect(mock.calls).toHaveLength(1);
+  });
+
+  it('never prompts for a background read when the permission is pending', async () => {
+    installPermission('prompt');
+    const mock = installGeolocation([{ success: true }]);
+
+    const result = await getPosition({ background: true });
+
+    expect(result).toBeNull();
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('never prompts for a background read when the permissions API is unavailable', async () => {
+    const mock = installGeolocation([{ success: true }]);
+
+    const result = await getPosition({ background: true });
+
+    expect(result).toBeNull();
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('reads a background position silently when the permission is granted', async () => {
+    installPermission('granted');
+    const mock = installGeolocation([{ success: true }]);
+
+    const result = await getPosition({ background: true });
+
+    expect(result).toEqual({ lat: 43.3623, lon: -8.4115 });
+    expect(mock.calls).toHaveLength(1);
+  });
+
+  it('asks once on an explicit request even when the permission is pending', async () => {
+    installPermission('prompt');
+    const mock = installGeolocation([{ success: true }]);
+
+    const result = await getPosition();
+
+    expect(result).toEqual({ lat: 43.3623, lon: -8.4115 });
     expect(mock.calls).toHaveLength(1);
   });
 
@@ -133,6 +215,8 @@ describe('getPosition()', () => {
     const p1 = getPosition();
     const p2 = getPosition();
 
+    // The permission check resolves before getCurrentPosition is reached.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     resolvePos();
     const [res1, res2] = await Promise.all([p1, p2]);
 

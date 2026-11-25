@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildLegacyCatalog, getCatalog, normalizeText } from '../src/services/catalog';
 import { haversineMeters, nearbyStops, planDirect, planRoute, planTransfer } from '../src/services/planner';
 import { catalogText, nearbyText, planText, sanitize, stopText } from '../src/services/legacyText';
+import { busAlternatives } from '../src/services/schedule';
 
 const payload = JSON.parse(readFileSync('research/catalog.json', 'utf8'));
 const catalog = buildLegacyCatalog(payload.iTranvias.actualizacion);
@@ -103,6 +104,20 @@ describe('text wire format', () => {
     const fields = record.split('|');
     expect(fields).toHaveLength(16);
     expect(fields.slice(-3)).toEqual(['7', '14:45', '0']);
+  });
+
+  it('puts the bus that meets the arrival time first, then later and earlier ones', () => {
+    const option = { type: 'direct', totalMinutes: 20, walkMeters: 0, legs: [{ lineId: 1 }] } as any;
+    const now = new Date('2026-01-01T12:00:00Z');
+    const target = new Date(now.getTime() + 40 * 60_000);
+
+    // 3 min arrives 23 min from now (before target); 15 min arrives at 35 min
+    // (the last one on time); 30 min arrives at 50 min (late).
+    const buses = busAlternatives(option, [3, 15, 30], now, target);
+
+    expect(buses.map((bus) => bus.waitMinutes)).toEqual([15, 30, 3]);
+    expect(buses[0].late).toBe(false);
+    expect(buses[1].late).toBe(true);
   });
 
   it('serialises nearby stops in metres', () => {

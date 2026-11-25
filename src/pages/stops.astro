@@ -85,7 +85,12 @@ const t = getTranslations(lang);
       </div>`;
 
 	    try {
-	      const pos = await getPosition({ forceRefresh });
+	      // Loading the page is not a request for the user's location: read it
+	      // silently only when it is already granted. The refresh button is the
+	      // explicit action that may prompt.
+	      // Abrir la página no es pedir la ubicación: solo se lee en silencio si
+	      // ya está concedida. El botón de refrescar es la acción que pregunta.
+	      const pos = await getPosition({ forceRefresh, background: !forceRefresh });
 	      const hasUserPos = Boolean(pos);
 	      if (pos) {
 	        currentLat = pos.lat;

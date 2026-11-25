@@ -1,6 +1,9 @@
 package corunabus;
 
 import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Command;
+import javax.microedition.lcdui.CommandListener;
+import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
 
@@ -9,7 +12,7 @@ import javax.microedition.lcdui.Graphics;
  * libre. Arriba/abajo cambia el número, izquierda/derecha cambia de rueda, OK
  * acepta y la tecla derecha ("Ahora") planifica sin hora límite.
  */
-public class TimePicker extends Canvas {
+public class TimePicker extends Canvas implements CommandListener {
 
     public interface Listener {
         /** hhmm "HH:MM", o null cuando se elige "Ahora". */
@@ -23,11 +26,22 @@ public class TimePicker extends Canvas {
     private int field = 0; // 0 = horas, 1 = minutos
     private final Listener listener;
 
+    // Comandos de verdad para que las teclas blandas muestren "Aceptar" y
+    // "Ahora": en el E71 el botón central confirma, pero sin comandos los de
+    // los lados no mostraban ninguna etiqueta de confirmación de la hora.
+    private final Command okCommand = new Command("Aceptar", Command.OK, 1);
+    private final Command nowCommand = new Command("Ahora", Command.SCREEN, 2);
+    private final Command backCommand = new Command("Atrás", Command.BACK, 3);
+
     public TimePicker(int hour, int minute, Listener listener) {
         this.hour = hour;
         this.minute = minute;
         this.listener = listener;
         setTitle("Hora de llegada");
+        addCommand(okCommand);
+        addCommand(nowCommand);
+        addCommand(backCommand);
+        setCommandListener(this);
     }
 
     private Font small() {
@@ -90,6 +104,7 @@ public class TimePicker extends Canvas {
         g.fillRect(0, by, w, barH);
         g.setColor(0x444444);
         g.drawString("Atrás", 4, by + 3, Graphics.TOP | Graphics.LEFT);
+        g.drawString("Aceptar", w / 2, by + 3, Graphics.TOP | Graphics.HCENTER);
         g.drawString("Ahora", w - 4, by + 3, Graphics.TOP | Graphics.RIGHT);
     }
 
@@ -119,6 +134,16 @@ public class TimePicker extends Canvas {
         } else if (keyCode == -7 || keyCode == KEY_NUM9) {
             listener.timePicked(null);
         } else if (keyCode == -6 || keyCode == KEY_NUM0) {
+            listener.timeCancelled();
+        }
+    }
+
+    public void commandAction(Command c, Displayable d) {
+        if (c == okCommand) {
+            listener.timePicked(pad2(hour) + ":" + pad2(minute));
+        } else if (c == nowCommand) {
+            listener.timePicked(null);
+        } else {
             listener.timeCancelled();
         }
     }

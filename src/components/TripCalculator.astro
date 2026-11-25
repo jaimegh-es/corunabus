@@ -546,11 +546,14 @@ const t = getTranslations(lang);
     background: #3b82f6;
     color: white;
     padding: 0.4rem 0.8rem;
+    border: none;
     border-radius: 6px;
+    font-family: inherit;
     font-size: 0.8rem;
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
+    cursor: pointer;
     transition: background 0.2s;
   }
 
@@ -791,6 +794,7 @@ const t = getTranslations(lang);
   } from 'lucide';
   import { getTranslations } from '../utils/i18n';
   import { getPosition } from '../utils/geolocation';
+  import { guardPhantomClicks } from '../utils/phantomClicks';
 
   const lang = document.documentElement.getAttribute('data-lang') || 'es';
   const t = getTranslations(lang);
@@ -833,6 +837,13 @@ const t = getTranslations(lang);
         }
       });
       
+      // Same guard as the favourites list: a scroll gesture that starts on a
+      // result card must not open the route map when the finger lifts.
+      // Mismo blindaje que en favoritos: un scroll que empieza en una tarjeta
+      // no debe abrir el mapa de la ruta al levantar el dedo.
+      const resultsContainer = this.querySelector('#results') as HTMLElement | null;
+      if (resultsContainer) guardPhantomClicks(resultsContainer);
+
       this.renderIcons();
       this.autoPopulateFromUrl();
     }
@@ -1185,6 +1196,10 @@ const t = getTranslations(lang);
     setupAutocomplete(inputId: string) {
       const input = this.querySelector(`#${inputId}`) as HTMLInputElement;
       const resultsDiv = this.querySelector(`#${inputId}-results`) as HTMLDivElement;
+      // The dropdown scrolls, so it can also pick a stop nobody tapped.
+      // El desplegable se desplaza, así que también puede elegir una parada
+      // que nadie tocó.
+      if (resultsDiv) guardPhantomClicks(resultsDiv);
       let timeout: any = null;
 
       input?.addEventListener('input', () => {
@@ -1485,15 +1500,24 @@ const t = getTranslations(lang);
           });
         });
 
-        // Add 'Ver parada' listeners to save destination
+        // Add 'Ver parada' listeners to save destination and navigate. The
+        // button is not an anchor on purpose: a WebView can natively activate
+        // an anchor at the end of a fling with no DOM click, which no listener
+        // could block. Navigation only happens on a trusted click.
+        // El botón no es un enlace a propósito: un WebView puede activar
+        // nativamente un enlace al asentarse un fling sin click DOM, y ningún
+        // listener podría bloquearlo. Solo navega un click de confianza.
         resultsDiv.querySelectorAll('.btn-view-stop').forEach(btn => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', (e) => {
+            if (!e.isTrusted) return;
             const destId = btn.getAttribute('data-dest');
             if (destId) {
               import('../utils/tracking').then(({ tracking }) => {
                 tracking.setTargetDestination(parseInt(destId));
               });
             }
+            const href = btn.getAttribute('data-href');
+            if (href) window.location.href = href;
           });
         });
 
@@ -1977,9 +2001,9 @@ const t = getTranslations(lang);
               <button class="btn-track-route" data-line="${l.lineId}" data-origin="${l.originStop.id}" data-dest="${l.destStop.id}" title="${lang === 'en' ? 'Track this bus' : 'Seguir este bus'}">
                 <i data-lucide="navigation" style="width: 16px; height: 16px;"></i>
               </button>
-              <a href="/stop/${l.originStop.id}" class="btn-view-stop" data-dest="${l.destStop.id}">
+              <button type="button" class="btn-view-stop" data-href="/stop/${l.originStop.id}" data-dest="${l.destStop.id}">
                 ${lang === 'en' ? 'View stop' : 'Ver parada'}
-              </a>
+              </button>
               <button class="fav-route-btn" data-origin="${l.originStop.id}" data-dest="${l.destStop.id}" data-line="${l.lineId}" data-line-name="${l.lineComer}">
                 <i data-lucide="heart" style="width: 20px; height: 20px; fill: ${isFav ? 'currentColor' : 'none'}"></i>
               </button>
@@ -2017,9 +2041,9 @@ const t = getTranslations(lang);
               <button class="btn-track-route" data-line="${l.lineId}" data-origin="${l.originStop.id}" data-dest="${l.destStop.id}" title="${lang === 'en' ? 'Track this bus' : 'Seguir este bus'}">
                 <i data-lucide="navigation" style="width: 16px; height: 16px;"></i>
               </button>
-              <a href="/stop/${l.originStop.id}" class="btn-view-stop" data-dest="${l.destStop.id}">
+              <button type="button" class="btn-view-stop" data-href="/stop/${l.originStop.id}" data-dest="${l.destStop.id}">
                 ${lang === 'en' ? 'View stop' : 'Ver parada'}
-              </a>
+              </button>
               <button class="fav-route-btn" data-origin="${l.originStop.id}" data-dest="${l.destStop.id}" data-line="${l.lineId}" data-line-name="${l.lineComer}">
                 <i data-lucide="heart" style="width: 20px; height: 20px; fill: ${isFav ? 'currentColor' : 'none'}"></i>
               </button>

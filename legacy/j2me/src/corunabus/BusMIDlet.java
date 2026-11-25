@@ -39,6 +39,9 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
     private ScrollList stopPicker;
     private ScrollList resultsList;
     private ScrollList planList;
+    private ScrollList busList;
+    /** Lista a la que vuelve "Atrás" desde el detalle (null = lista de rutas). */
+    private ScrollList detailBack;
     private Vector planOptions = new Vector();
     private Vector planBuses = new Vector();
     private int planChoice = 0;
@@ -673,6 +676,8 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         String error = "";
         planOptions.removeAllElements();
         planBuses.removeAllElements();
+        busList = null;
+        detailBack = null;
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -751,13 +756,55 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         return index >= 0 && index < f.length ? f[index] : "";
     }
 
-    /** Datos completos de la opción: paradas, hora de paso y demás buses. */
+    /**
+     * Entra en una ruta: si tiene varios próximos buses primero se eligen y
+     * después se ve el detalle del elegido.
+     */
     private void openPlanDetail(int index) {
         if (index < 0 || index >= planOptions.size()) return;
         planChoice = index;
         String[] f = (String[]) planOptions.elementAt(index);
         planBoardStop = Catalog.parseInt(f[3], 0);
         Vector buses = (Vector) planBuses.elementAt(index);
+        if (buses.size() > 1) {
+            openBusPicker(index);
+            return;
+        }
+        openBusDetail(index, 0);
+    }
+
+    /** Próximos buses de la ruta, recomendado primero. */
+    private void openBusPicker(int index) {
+        String[] f = (String[]) planOptions.elementAt(index);
+        Vector buses = (Vector) planBuses.elementAt(index);
+        busList = new ScrollList("Elige bus · línea " + f[2]);
+        busList.setListener(this);
+        for (int i = 0; i < buses.size(); i++) {
+            busList.add(busLabel((String[]) buses.elementAt(i)));
+        }
+        display.setCurrent(busList);
+    }
+
+    /** "22:31 (en 3 min) · llega 22:52" o con "· tarde" al final. */
+    private String busLabel(String[] bus) {
+        StringBuffer out = new StringBuffer();
+        if (bus[1].length() > 0) out.append(bus[1]);
+        else out.append("Bus");
+        if (bus[0].length() > 0) out.append(" (en ").append(bus[0]).append(" min)");
+        if (bus[2].length() > 0) out.append(" · llega ").append(bus[2]);
+        if ("1".equals(bus[3])) out.append(" · tarde");
+        return out.toString();
+    }
+
+    /** Detalle del bus concreto elegido dentro de una ruta. */
+    private void openBusDetail(int index, int busIndex) {
+        if (index < 0 || index >= planOptions.size()) return;
+        planChoice = index;
+        String[] f = (String[]) planOptions.elementAt(index);
+        planBoardStop = Catalog.parseInt(f[3], 0);
+        Vector buses = (Vector) planBuses.elementAt(index);
+        String[] chosen = busIndex >= 0 && busIndex < buses.size()
+                ? (String[]) buses.elementAt(busIndex) : null;
         int base = "D".equals(f[1]) ? 8 : 13;
 
         StringBuffer body = new StringBuffer();
@@ -777,11 +824,10 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
             body.append("Baja en ").append(nameOf(f[10])).append('\n');
         }
 
-        String[] first = firstBus(index);
-        String depart = first != null ? first[1] : "";
-        String wait = first != null ? first[0] : field(f, base);
-        String arrive = first != null && first[2].length() > 0 ? first[2] : field(f, base + 1);
-        String late = first != null ? first[3] : field(f, base + 2);
+        String depart = chosen != null ? chosen[1] : "";
+        String wait = chosen != null ? chosen[0] : field(f, base);
+        String arrive = chosen != null && chosen[2].length() > 0 ? chosen[2] : field(f, base + 1);
+        String late = chosen != null ? chosen[3] : field(f, base + 2);
 
         body.append('\n');
         if (depart.length() > 0) {
@@ -800,16 +846,13 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
             body.append('\n').append("Otros buses de la línea ").append(f[2]);
             if (!"D".equals(f[1])) body.append(" en tu parada");
             body.append(":\n");
-            for (int i = 1; i < buses.size(); i++) {
-                String[] b = (String[]) buses.elementAt(i);
-                body.append(b[1]);
-                if (b[0].length() > 0) body.append(" (en ").append(b[0]).append(" min)");
-                if (b[2].length() > 0) body.append(" · llega ").append(b[2]);
-                if ("1".equals(b[3])) body.append(" tarde");
-                body.append('\n');
+            for (int i = 0; i < buses.size(); i++) {
+                if (i == busIndex) continue;
+                body.append(busLabel((String[]) buses.elementAt(i))).append('\n');
             }
         }
 
+        detailBack = buses.size() > 1 ? busList : null;
         planDetail = new TextView("Ruta", body.toString(), "Parada", "Favorito", this);
         display.setCurrent(planDetail);
     }
@@ -916,10 +959,11 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
 
     // ------------------------------------------------------ detalle de ruta
 
-    /** Atrás desde el itinerario: siempre vuelve a la lista de rutas. */
+    /** Atrás desde el itinerario: a la lista de buses o a la de rutas. */
     public void textBack() {
         try {
-            if (planList != null) display.setCurrent(planList);
+            if (detailBack != null) display.setCurrent(detailBack);
+            else if (planList != null) display.setCurrent(planList);
             else showMenu();
         } catch (Throwable t) {
             crashed(t);
@@ -952,6 +996,8 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
         try {
             if (list == planList) {
                 openPlanDetail(index);
+            } else if (list == busList) {
+                openBusDetail(planChoice, index);
             } else if (list == favoritesList) {
                 openFavorite(index);
             } else if (list == resultsList) {
@@ -971,6 +1017,10 @@ public class BusMIDlet extends MIDlet implements CommandListener, ScrollList.Lis
                 display.setCurrent(searchBox);
             } else if (list == resultsList) {
                 chooseStop();
+            } else if (list == busList) {
+                detailBack = null;
+                if (planList != null) display.setCurrent(planList);
+                else showMenu();
             } else if (list == stopPicker) {
                 planMode = 0;
                 showMenu();

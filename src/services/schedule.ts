@@ -82,10 +82,14 @@ export function parseClock(value: string | null | undefined, now = new Date()): 
 export type BusAlternative = OptionTiming;
 
 /**
- * Buses que sirven la primera línea de una opción, del recomendado en adelante.
- * Con hora límite se empieza por el último que aún llega a tiempo y se sigue
- * con los siguientes, que llegan más tarde (el usuario puede preferirlos),
- * añadiendo un par de anteriores para poder ir un poco antes.
+ * Buses que sirven la primera línea de una opción, empezando por el
+ * recomendado. Con hora límite el recomendado es el último que aún llega a
+ * tiempo; después vienen los siguientes (que llegan más tarde y pueden
+ * preferirse) y, al final, un par de anteriores para poder ir un poco antes.
+ *
+ * El recomendado tiene que ir primero y no dos puestos más atrás: el cliente
+ * Java ME pinta el primer bus de la lista como estimación, así que si delante
+ * van los de "salir ahora" la planificación con hora parece ignorada.
  */
 export function busAlternatives(
   option: PlanOption,
@@ -107,21 +111,21 @@ export function busAlternatives(
     start = chosen >= 0 ? chosen : 0;
   }
 
-  const from = target ? Math.max(0, start - 2) : start;
+  const indices: number[] = [];
+  for (let i = start; i < ordered.length && indices.length < max; i++) indices.push(i);
+  for (let i = start - 1; i >= 0 && i >= start - 2 && indices.length < max; i--) indices.push(i);
 
-  const out: BusAlternative[] = [];
-  for (let i = from; i < ordered.length && out.length < max; i++) {
-    const wait = ordered[i];
+  return indices.map((index) => {
+    const wait = ordered[index];
     const depart = new Date(now.getTime() + wait * 60_000);
     const arrive = new Date(depart.getTime() + option.totalMinutes * 60_000);
-    out.push({
+    return {
       waitMinutes: wait,
       departAt: clock(depart),
       arriveAt: clock(arrive),
       late: target ? arrive.getTime() > target.getTime() : false,
-    });
-  }
-  return out;
+    };
+  });
 }
 
 export function timeOptions(

@@ -2803,7 +2803,10 @@ const { title } = Astro.props;
 
         const prevStop = getPreviousStop(info.lineId, info.destinationStopId, catalog);
 
-        getPosition().then((position) => {
+        // Background poll: never open the permission dialog while the user is
+        // riding (Firefox grants location per visit, so prompting here repeats
+        // the dialog every few seconds).
+        getPosition({ background: true }).then((position) => {
             if (!position) {
                 console.warn("[GPS Alert] Geolocation failed");
                 return;
@@ -3325,36 +3328,17 @@ const { title } = Astro.props;
 
         if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
-        const path = window.location.pathname;
-        const isHomePage = path === '/' || path === '/index.html';
-
-        const usePosition = () => {
-            getPosition().then((pos) => {
-                if (pos) storage.autoSelectLocationFromGPS(pos.lat, pos.lon);
-            });
-        };
-
-        // Permissions API available: never trigger a prompt on subpages.
-        // Disponible la Permissions API: nunca se dispara el aviso en subpáginas.
-        const perms = (navigator as any).permissions;
-        if (perms?.query) {
-            try {
-                const state = await perms.query({ name: 'geolocation' });
-                if (state.state === 'granted') {
-                    usePosition();
-                } else if (state.state === 'prompt' && isHomePage) {
-                    usePosition();
-                }
-                // 'denied': bloqueado por el usuario, no se vuelve a pedir.
-                return;
-            } catch {
-                // Si algo falla seguimos con la comprobación de abajo.
-            }
-        }
-
-        // Browser without Permissions API: ask only on the home page.
-        // Navegador sin Permissions API: se pide solo en el inicio.
-        if (isHomePage) usePosition();
+        // Web: only read the position silently when the browser has already
+        // granted it. Firefox (and Focus) grant geolocation for one visit by
+        // default, so auto-asking on page load made the dialog reappear on
+        // every page. Explicit GPS buttons still ask when the user taps them.
+        // Web: solo se lee en silencio si el permiso ya está concedido. Firefox
+        // (y Focus) lo conceden para una sola visita, así que preguntar al
+        // cargar hacía que el aviso reapareciera en cada página. Los botones
+        // de GPS siguen preguntando cuando el usuario los pulsa.
+        getPosition({ background: true }).then((pos) => {
+            if (pos) storage.autoSelectLocationFromGPS(pos.lat, pos.lon);
+        });
     }
     bootstrapLocationFromGPS();
 

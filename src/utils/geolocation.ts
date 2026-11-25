@@ -8,6 +8,16 @@ export interface GeolocationResult {
 
 export interface GetPositionOptions {
   forceRefresh?: boolean;
+  /**
+   * Automatic, non user-initiated read (page load, polling, sorting). Such a
+   * read must never open the browser permission prompt: Firefox and Firefox
+   * Focus grant geolocation for a single visit by default, so an automatic
+   * call on every page load or timer asks the user again and again.
+   * Una lectura automática (arranque, sondeo, ordenar por cercanía) nunca debe
+   * abrir el aviso de permiso: Firefox y Focus conceden la ubicación para una
+   * sola visita, así que llamar automáticamente vuelve a preguntar sin parar.
+   */
+  background?: boolean;
 }
 
 const PERMISSION_DENIED = 1;
@@ -60,6 +70,24 @@ function requestWebPosition(options: PositionOptions): Promise<GeolocationResult
 function isPermissionGranted(status: any): boolean {
   if (!status) return false;
   return status.location === 'granted' || status.coarseLocation === 'granted';
+}
+
+type WebPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
+
+/**
+ * Current web permission state, without ever triggering the prompt. Browsers
+ * without the Permissions API (older Safari) answer `unknown`.
+ */
+async function webPermissionState(): Promise<WebPermissionState> {
+  try {
+    const perms = typeof navigator !== 'undefined' ? (navigator as any).permissions : null;
+    if (!perms?.query) return 'unknown';
+    const status = await perms.query({ name: 'geolocation' });
+    const state = status?.state;
+    return state === 'granted' || state === 'denied' || state === 'prompt' ? state : 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 async function getNativePosition(): Promise<GeolocationResult | null> {
@@ -136,8 +164,16 @@ function nativeWatchOnce(durationMs: number): Promise<GeolocationResult | null> 
   });
 }
 
-async function getWebPosition(): Promise<GeolocationResult | null> {
+async function getWebPosition(background: boolean): Promise<GeolocationResult | null> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) return null;
+
+  const state = await webPermissionState();
+  if (state === 'denied') return null;
+
+  // Background reads are silent: with permission in 'prompt' (or unknown, as
+  // Firefox reports after a one-off grant expires) calling anyway would show
+  // the dialog. On the web they simply return no fix.
+  if (background && state !== 'granted') return null;
 
   try {
     return await requestWebPosition({ enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 });
@@ -145,6 +181,11 @@ async function getWebPosition(): Promise<GeolocationResult | null> {
     const code = (err as GeolocationPositionError | undefined)?.code;
     if (code === PERMISSION_DENIED) return null;
   }
+
+  // Retry at high accuracy only when the permission is already granted. When
+  // it is still 'prompt', our timeout usually means the dialog is unanswered,
+  // and a second call would open another prompt.
+  if (state !== 'granted') return null;
 
   try {
     return await requestWebPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
@@ -187,7 +228,7 @@ export async function getPosition(options?: GetPositionOptions): Promise<Geoloca
       if (Capacitor.isNativePlatform()) {
         res = await getNativePosition();
       } else {
-        res = await getWebPosition();
+        res = await getWebPosition(options?.background ?? false);
       }
       if (res) {
         lastKnownPosition = { result: res, time: Date.now() };
